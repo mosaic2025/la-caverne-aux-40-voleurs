@@ -1,0 +1,26 @@
+{
+  "name": "la-caverne-aux-40-voleurs",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/copy-monaco.mjs && vite",
+    "build": "node scripts/copy-monaco.mjs && tsc -b && vite build && node scripts/copy-monaco.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
+    "sandbox:build": "docker build -t caverne-sandbox-node:latest -f server/sandbox/Dockerfile server/sandbox && docker build -t caverne-sandbox-python:latest -f server/sandbox/Dockerfile.py server/sandbox"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "monaco-editor": "^0.55.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}
