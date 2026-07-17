@@ -141,3 +141,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Monaco self-hosted assets — généré par scripts/copy-monaco.mjs
+public/monaco-editor
