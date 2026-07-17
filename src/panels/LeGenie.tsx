@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type { Genie, MoeRun, QwenModel, Effort, TraitorCheck, SiroccoMetrics } from "../types";
+import { ROUTING_STRATEGIES, ROUTING_LABELS, type RoutingStrategy } from "../types";
 
 const QWEN: QwenModel[] = ["qwen-turbo", "qwen-plus", "qwen-max", "qwen-coder-plus", "qwen-vl-plus"];
 const EFFORTS: Effort[] = ["low", "med", "high"];
@@ -55,6 +56,9 @@ export function LeGenie() {
   const [forgeK, setForgeK] = useState(3);
   const [forgeDominance, setForgeDominance] = useState(0.05);
   const [parSpecialisation, setParSpecialisation] = useState(true);
+  const [forgeRoutingStrategy, setForgeRoutingStrategy] = useState<RoutingStrategy>("auto");
+  const [forgeMl, setForgeMl] = useState(true);
+  const [forgeEmbeddingModel, setForgeEmbeddingModel] = useState("text-embedding-v3");
   const [models, setModels] = useState<ForgeModel[]>(DEFAULT_MODELS);
   const [useOrchestrator, setUseOrchestrator] = useState(false);
   const [orchestrator, setOrchestrator] = useState<ForgeOrchestrator>({
@@ -107,6 +111,9 @@ export function LeGenie() {
         k: forgeK,
         dominance: forgeDominance,
         parSpecialisation,
+        routingStrategy: forgeRoutingStrategy,
+        ml: forgeMl,
+        embeddingModel: forgeEmbeddingModel,
         models,
         orchestrateur: useOrchestrator ? orchestrator : undefined,
       });
@@ -127,6 +134,9 @@ export function LeGenie() {
       if (Number.isFinite(r.k)) setForgeK(Math.max(1, Math.min(4, Math.floor(r.k))));
       if (Number.isFinite(r.dominance)) setForgeDominance(r.dominance);
       if (typeof r.parSpecialisation === "boolean") setParSpecialisation(r.parSpecialisation);
+      if (r.routingStrategy && ROUTING_STRATEGIES.includes(r.routingStrategy)) setForgeRoutingStrategy(r.routingStrategy);
+      if (typeof r.ml === "boolean") setForgeMl(r.ml);
+      if (typeof r.embeddingModel === "string") setForgeEmbeddingModel(r.embeddingModel);
       if (Array.isArray(r.models) && r.models.length) {
         setModels(r.models.map((m) => ({
           nom: m.nom || "", specialite: m.specialite || "",
@@ -258,6 +268,17 @@ export function LeGenie() {
                   <input type="checkbox" checked={parSpecialisation} onChange={(e) => setParSpecialisation(e.target.checked)} />
                   Routage par spécialisation (MoE emboîté : choisir la spécialisation puis l'expert)
                 </label>
+                <select value={forgeRoutingStrategy} onChange={(e) => setForgeRoutingStrategy(e.target.value as RoutingStrategy)} style={{ gridColumn: "1/2" }}>
+                  {ROUTING_STRATEGIES.map((s) => <option key={s} value={s}>{ROUTING_LABELS[s]}</option>)}
+                </select>
+                <select value={forgeEmbeddingModel} onChange={(e) => setForgeEmbeddingModel(e.target.value)} style={{ gridColumn: "2/3" }}>
+                  <option value="text-embedding-v3">Qwen text-embedding-v3</option>
+                  <option value="nomic-embed-text">Ollama nomic-embed-text</option>
+                </select>
+                <label style={{ gridColumn: "1/3", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
+                  <input type="checkbox" checked={forgeMl} onChange={(e) => setForgeMl(e.target.checked)} />
+                  Apprentissage automatique (ML) : le Génie ajuste ses choix d'experts selon les performances passées.
+                </label>
               </div>
               <textarea
                 placeholder="Charte de voix du Génie"
@@ -350,7 +371,7 @@ export function LeGenie() {
         {frags.length > 0 && !run && <p className="stub">🪔 Le Génie consulte les esprits de la lampe… ({frags.length} murmure(s))</p>}
         {answer && <div style={{ whiteSpace: "pre-wrap" }}>{answer}</div>}
         {run && <p style={{ opacity: .5, fontSize: 12, marginTop: 10 }}>
-          {run.tokens.total} tokens (routing {run.tokens.routing} · fragments {run.tokens.fragments} · fusion {run.tokens.fusion}) · {run.latencyMs}ms
+          {run.tokens.total} tokens (routing {run.tokens.routing} · fragments {run.tokens.fragments} · fusion {run.tokens.fusion}) · {run.latencyMs}ms · mode {run.routingMode} ({run.routingStrategy})
         </p>}
         {sirocco && (
           <div style={{ marginTop: 10, display: "flex", gap: 12, alignItems: "center", background: "#14110b", border: "1px solid #2a2216", borderRadius: 8, padding: 10 }}>

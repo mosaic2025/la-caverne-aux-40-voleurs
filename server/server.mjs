@@ -35,6 +35,7 @@ import {
   ensureDinars,
 } from "./moe.mjs";
 const DEFAULT_PROVIDER = "qwen-cloud";
+import { createStore } from "./store.mjs";
 import { tryRoutes } from "./routes/registry.mjs";
 import { handleMaxiRoutes } from "./routes/maxi_builder.mjs";
 import { ContractRegistry } from "./maxi/registry.mjs";
@@ -242,6 +243,7 @@ const ROUTE_CTX = {
   helpers: { sendJson, sendError, readBody, newId },
   moe: { chatCompletion, embedText, runMoe, runBaseline, judgeQuality, percentile, QWEN_MODELS, MODEL_PRICES },
   maxi: { registry: maxiRegistry },
+  defaultProvider: DEFAULT_PROVIDER,
 };
 
 // ---------- Routeur ----------
@@ -427,7 +429,7 @@ const server = http.createServer(async (req, res) => {
         const description = String(body?.description || "").trim();
         if (!description) return sendError(res, 400, "description requise");
         const SYS = `${UNCHAINED}Tu es un ingénieur MoE. À partir de la description utilisateur, tu produis un JSON STRICT décrivant un Génie (MoE emboîté par spécialisations). Schéma :
-{"nom": string, "voiceCharter": string, "budgetTotal": number, "k": number (1-4), "dominance": number (0.01-0.2), "parSpecialisation": boolean,
+{"nom": string, "voiceCharter": string, "budgetTotal": number, "k": number (1-4), "dominance": number (0.01-0.2), "parSpecialisation": boolean, "routingStrategy": "auto"|"mono"|"topk"|"specialisation"|"bazaar"|"cost"|"perf", "ml": boolean, "embeddingModel": string (ex: "text-embedding-v3" ou "nomic-embed-text"),
  "models": [{"nom": string, "specialite": string, "specialisation": string (groupe), "modele": string, "effort": "low"|"med"|"high", "systemPrompt": string, "capTokens": number, "provider": "qwen-cloud"|"alibaba"|"ollama"}],
  "orchestrateur": {"modele": string, "provider": string, "effort": "low"|"med"|"high", "systemPrompt": string, "capTokens": number} | null}
 Règles : 2 à 6 experts regroupés en 1-3 spécialisations. Modeles qwen-cloud: qwen-turbo, qwen-plus, qwen-max, qwen-coder-plus, qwen-vl-plus. Pour orchestrateur préfère qwen-max. Réponds UNIQUEMENT avec le JSON, aucun texte autour.`;
@@ -555,6 +557,8 @@ Règles : 2 à 6 experts regroupés en 1-3 spécialisations. Modeles qwen-cloud:
           dominance: Number.isFinite(body.dominance) ? body.dominance : undefined,
           ml: body.ml !== false,
           parSpecialisation: body.parSpecialisation === true,
+          routingStrategy: typeof body.routingStrategy === "string" && body.routingStrategy.trim() ? body.routingStrategy : "auto",
+          embeddingModel: typeof body.embeddingModel === "string" && body.embeddingModel.trim() ? body.embeddingModel : "text-embedding-v3",
           orchestrateurId,
           provider, // Store the common provider in the genie
         };
@@ -657,8 +661,12 @@ Règles : 2 à 6 experts regroupés en 1-3 spécialisations. Modeles qwen-cloud:
       }, 15000);
 
       try {
-        // Fusion utilisateur : le Génie adapte sa voix au style appris du chef.
-        const hint = fusionVoiceHint(store, userId);
+        // Fusion utilisateur : le Génie adapte sa voix au style appris du chef + à Nour.
+        const { CompanionAgent, evolveCompanion } = await import("./agents/companion.mjs");
+        const avatarData = store.avatars?.[userId];
+        const avatarHint = avatarData ? CompanionAgent.deserialize(avatarData).buildVoiceHint(store.profils?.[userId]) : "";
+        const fusionHint = fusionVoiceHint(store, userId);
+        const hint = [fusionHint, avatarHint].filter(Boolean).join("\n");
         const genieForRun = hint ? { ...genie, voiceCharter: genie.voiceCharter + "\n" + hint } : genie;
         const { run } = await runMoe({
           genie: genieForRun,
@@ -675,6 +683,16 @@ Règles : 2 à 6 experts regroupés en 1-3 spécialisations. Modeles qwen-cloud:
         if (store.runs.length > 500) store.runs = store.runs.slice(-500);
         fusionObserve(store, userId, query.trim(), run.answer); // apprentissage du style
         onMoeRunComplete(run, { store, save }); // Balance du Marchand : coût bande vs estimation solo
+        // ── Évolution de La Lampe (compagnon avatar) ──
+        try {
+          const p = store.profils?.[userId];
+          evolveCompanion(store, userId, {
+            userMsg: query.trim(),
+            genieAnswer: run.answer,
+            fusionPct: p?.fusionPct || 0,
+            name: "Nour",
+          });
+        } catch (e) { console.warn("[lampe] évolution ignorée:", e.message); }
         save();
         sse("final", run);
       } catch (err) {

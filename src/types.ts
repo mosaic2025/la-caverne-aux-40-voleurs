@@ -46,6 +46,8 @@ export interface Genie {
   ml?: boolean;                // apprentissage perf historique
   orchestrateurId?: string;    // id du Voleur orchestrateur (fusion dédiée)
   parSpecialisation?: boolean; // routage 2 niveaux (groupe puis expert)
+  routingStrategy?: RoutingStrategy; // stratégie de routage explicite (auto par défaut)
+  embeddingModel?: string;     // modèle d'embedding utilisé par le Génie
 }
 
 /** Trace d'une exécution MoE (pour Le Repaire + Les Trésors). */
@@ -62,6 +64,8 @@ export interface MoeRun {
   bazaar?: { encheres: any[]; winners: string[]; losers: string[] };
   traitor?: TraitorCheck;
   sirocco?: SiroccoMetrics;
+  routingStrategy?: RoutingStrategy;
+  routingMode?: string;
 }
 
 export interface SiroccoMetrics {
@@ -78,6 +82,52 @@ export interface TraitorCheck {
   verdict?: "founded" | "unfounded";
   correctedAnswer?: string;
   tokens: number;
+}
+
+export interface SharedKnowledgeStats {
+  entries: number;
+  estimatedTokens: number;
+  estimatedTokensLabel: string;
+}
+
+export interface MemoryShard {
+  id: string;
+  type: "technique" | "préférence" | "emotion";
+  content: string;
+  weight: number;
+  ts: number;
+  topics?: string[];
+}
+
+export interface AvatarPersonality {
+  userId: string;
+  name: string;
+  mood: string;
+  formality: number;
+  verbosity: number;
+  humor: number;
+  patience: number;
+  birthTs: number;
+  stage: "oeuf" | "larve" | "forme" | "forme_eveillee";
+  interactions?: number;
+  fusionPct?: number;
+}
+
+export interface AvatarState {
+  exists: boolean;
+  userId?: string;
+  personality?: AvatarPersonality;
+  memories?: { role: "user" | "genie"; text: string; ts: number }[];
+  shards?: MemoryShard[];
+  profileId?: string;
+  unlockedSecrets?: string[];
+  progress?: {
+    stage: string;
+    nextAt: number | null;
+    interactions: number;
+    shardWeight: number;
+  };
+  hint?: string;
 }
 
 /** Résultat d'un benchmark Caverne vs agent unique (Les Trésors). */
@@ -170,3 +220,17 @@ export interface SabreDuel { query: string; solo: string; bande: string; gagnant
 export interface BalanceStats { requetes: number; tokensBande: number; tokensSolo: number; economiePct: number; }
 export interface Portrait { voleurId: string; url: string; }
 export interface SecretEntry { id: string; hash: string; salt: string; iterations: number; unlock: string; indice: string; difficulte: string; }
+
+export type RoutingStrategy = "auto" | "mono" | "topk" | "specialisation" | "bazaar" | "cost" | "perf";
+
+export const ROUTING_STRATEGIES: RoutingStrategy[] = ["auto", "mono", "topk", "specialisation", "bazaar", "cost", "perf"];
+
+export const ROUTING_LABELS: Record<RoutingStrategy, string> = {
+  auto: "Auto (dominance)",
+  mono: "Mono-expert",
+  topk: "Top-K embedding",
+  specialisation: "Par spécialisation",
+  bazaar: "Bazar des Dinars",
+  cost: "Moins cher d'abord",
+  perf: "Meilleur historique",
+};

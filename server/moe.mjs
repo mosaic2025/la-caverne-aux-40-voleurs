@@ -4,6 +4,7 @@
 // ============================================================
 
 import { getProvider } from "./providers/providerFactory.js";
+import { scanInput, scanOutput } from "./guards/filters.mjs";
 
 // Default provider for backward compatibility
 const DEFAULT_PROVIDER = "qwen-cloud";
@@ -38,6 +39,101 @@ function apiKey() {
   const k = process.env.DASHSCOPE_API_KEY;
   if (!k) throw new Error("DASHSCOPE_API_KEY manquante dans l'environnement");
   return k;
+}
+
+// Stratégies de routage explicites supportées par l'auto-routeur sélectionnable
+export const ROUTING_STRATEGIES = ["auto", "mono", "topk", "specialisation", "bazaar", "cost", "perf"];
+
+/**
+ * Sélectionne les experts selon la routingStrategy du Génie.
+ * Retourne { selected: [{voleur, score}], routingMode, mono }.
+ */
+function selectExperts({ genie, scored, kEff, bazaarCtx, bazaarEnabled, onEvent, providerName }) {
+  const strategy = genie.routingStrategy || "auto";
+  const DOMINANCE = Number(genie.dominance ?? process.env.MOE_DOMINANCE ?? 0.05);
+
+  // Helpers internes
+  const byTopK = (list) => list.slice(0, Math.max(1, Math.min(kEff, list.length)));
+  const monoFromTop = (list) => {
+    const top1 = list[0];
+    const top2 = list[1];
+    const isMono = !top2 || top1.score - top2.score >= DOMINANCE;
+    return { mono: isMono, selected: isMono ? list.slice(0, 1) : byTopK(list) };
+  };
+
+  // 1) Stratégie explicite : mono
+  if (strategy === "mono") {
+    return { selected: scored.slice(0, 1), routingMode: "mono", mono: true };
+  }
+
+  // 2) Stratégie explicite : top-k pur (embedding)
+  if (strategy === "topk") {
+    return { selected: byTopK(scored), routingMode: "topk", mono: scored.length === 1 };
+  }
+
+  // 3) Stratégie explicite : meilleur historique (perf)
+  if (strategy === "perf") {
+    const byPerf = [...scored].sort((a, b) => {
+      const pa = typeof a.voleur.perf === "number" ? a.voleur.perf : 0.5;
+      const pb = typeof b.voleur.perf === "number" ? b.voleur.perf : 0.5;
+      return pb - pa;
+    });
+    return { selected: byTopK(byPerf), routingMode: "perf", mono: byPerf.length === 1 };
+  }
+
+  // 4) Stratégie explicite : moins cher d'abord (cost)
+  if (strategy === "cost") {
+    const byCost = [...scored].sort((a, b) => {
+      const ca = MODEL_PRICES[a.voleur.modele] ?? MODEL_PRICES["qwen-plus"];
+      const cb = MODEL_PRICES[b.voleur.modele] ?? MODEL_PRICES["qwen-plus"];
+      return ca - cb;
+    });
+    return { selected: byTopK(byCost), routingMode: "cost", mono: byCost.length === 1 };
+  }
+
+  // 5) Stratégie explicite : bazaar (enchères Dinars)
+  if (strategy === "bazaar") {
+    return { selected: [], routingMode: "bazaar", mono: false, forceBazaar: true };
+  }
+
+  // 6) Stratégie explicite ou auto : routage par spécialisation
+  if (strategy === "specialisation" || genie.parSpecialisation) {
+    const groups = new Map();
+    for (const s of scored) {
+      const key = s.voleur.specialisation || "général";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(s);
+    }
+    const rankedGroups = [...groups.values()].sort((a, b) => b[0].score - a[0].score);
+    const topGroup = rankedGroups[0];
+    const secondGroup = rankedGroups[1];
+
+    if (strategy === "specialisation") {
+      // En mode explicite, on prend le top-1 de chaque groupe jusqu'à kEff
+      const selected = [];
+      for (const g of rankedGroups) {
+        if (selected.length >= kEff) break;
+        selected.push(g[0]);
+      }
+      return { selected, routingMode: "specialisation", mono: false };
+    }
+
+    // Auto avec parSpecialisation : dominance intra-groupe
+    const mono = !secondGroup || topGroup[0].score - secondGroup[0].score >= DOMINANCE;
+    const routingMode = mono ? "mono" : "specialisation";
+    let selected = mono
+      ? topGroup.slice(0, 1)
+      : topGroup.slice(0, Math.max(1, Math.min(kEff, topGroup.length)));
+    if (!mono && selected.length < kEff && secondGroup) {
+      const reste = kEff - selected.length;
+      selected = selected.concat(secondGroup.slice(0, Math.min(reste, secondGroup.length)));
+    }
+    return { selected, routingMode, mono };
+  }
+
+  // 7) Auto (défaut) : dominance simple
+  const { mono, selected } = monoFromTop(scored);
+  return { selected, routingMode: mono ? "mono" : "conseil", mono };
 }
 
 /**
@@ -89,8 +185,24 @@ export async function embedText(text, providerName = DEFAULT_PROVIDER) {
  * @returns {Promise<{text: string, promptTokens: number, completionTokens: number, totalTokens: number, latencyMs: number}>}
  */
 export async function chatCompletion(params, providerName = DEFAULT_PROVIDER) {
+  // L32-L34 — Guard entrant
+  const lastUser = [...(params.messages || [])].reverse().find((m) => m.role === "user");
+  if (lastUser && process.env.MOE_INPUT_GUARD !== "off") {
+    const scan = scanInput(lastUser.content);
+    if (!scan.safe) {
+      throw new Error(`Guard entrant : ${scan.issues.map((i) => i.type).join(", ")}`);
+    }
+  }
   const provider = getProvider(providerName);
-  return await provider.chatCompletion(params);
+  const result = await provider.chatCompletion(params);
+  // L32-L34 — Guard sortant
+  if (result.text && process.env.MOE_OUTPUT_GUARD !== "off") {
+    const scan = scanOutput(result.text);
+    if (!scan.safe) {
+      result.text = `[Bloqué par guard sortant : ${scan.issues.map((i) => i.type).join(", ")}]`;
+    }
+  }
+  return result;
 }
 
 /** Cosinus entre deux vecteurs. */
@@ -160,53 +272,24 @@ export async function runMoe({ genie, voleurs, query, k = 3, onEvent = () => {},
     })
     .sort((a, b) => b.score - a.score);
 
-  const DOMINANCE = Number(genie.dominance ?? process.env.MOE_DOMINANCE ?? 0.05);
   const kEff = Number.isFinite(genie.k) ? Math.max(1, Math.floor(genie.k)) : k;
 
-  // Routing 2 niveaux : on groupe par spécialisation, on choisit la meilleure spécialisation
-  // (score max du groupe), puis on route à l'intérieur de cette spécialisation.
-  let selected;
-  let mono;
-  let routingMode = "conseil";
-  if (genie.parSpecialisation) {
-    const groups = new Map();
-    for (const s of scored) {
-      const key = s.voleur.specialisation || "général";
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(s);
-    }
-    const rankedGroups = [...groups.values()].sort((a, b) => b[0].score - a[0].score);
-    const topGroup = rankedGroups[0];
-    const secondGroup = rankedGroups[1];
-    mono = !secondGroup || topGroup[0].score - secondGroup[0].score >= DOMINANCE;
-    routingMode = mono ? "mono" : "conseil";
-    selected = mono
-      ? topGroup.slice(0, 1)
-      : topGroup.slice(0, Math.max(1, Math.min(kEff, topGroup.length)));
-    // Si la spécialisation dominante a moins d'experts que k, on complète avec la suivante
-    if (!mono && selected.length < kEff && secondGroup) {
-      const reste = kEff - selected.length;
-      selected = selected.concat(secondGroup.slice(0, Math.min(reste, secondGroup.length)));
-    }
-  } else {
-    const top1 = scored[0];
-    const top2 = scored[1];
-    mono = !top2 || top1.score - top2.score >= DOMINANCE;
-    routingMode = mono ? "mono" : "conseil";
-    selected = mono
-      ? scored.slice(0, 1)
-      : scored.slice(0, Math.max(1, Math.min(kEff, scored.length)));
-  }
-  // ── BAZAAR DES DINARS : enchères avant sélection ──
+  // ── ROUTING SÉLECTIONNABLE (auto / mono / topk / specialisation / bazaar / cost / perf) ──
+  const strategy = genie.routingStrategy || "auto";
+  const forceBazaar = strategy === "bazaar";
+  const selection = selectExperts({ genie, scored, kEff, bazaarCtx, bazaarEnabled, onEvent, providerName });
+  let selected = selection.selected;
+  let mono = selection.mono;
+  let routingMode = selection.routingMode;
+
+  // ── BAZAAR DES DINARS : enchères optionnelles ──
   let bazaar = null;
-  if (bazaarEnabled && !mono) {
+  if ((bazaarEnabled || forceBazaar) && !mono) {
     bazaar = await runBazaar({ query, pool: scored.map((s) => s.voleur), kEff, providerName, genie });
     selected = bazaar.winners.map((id) => scored.find((s) => s.voleur.id === id)).filter(Boolean);
     if (selected.length === 0) {
       // Fallback sur routing embedding si le marché échoue
-      selected = genie.parSpecialisation
-        ? topGroup.slice(0, Math.max(1, Math.min(kEff, topGroup.length)))
-        : scored.slice(0, Math.max(1, Math.min(kEff, scored.length)));
+      selected = scored.slice(0, Math.max(1, Math.min(kEff, scored.length)));
     }
     routingMode = "bazaar";
     onEvent("bazaar", { encheres: bazaar.encheres, winners: bazaar.winners.map((id) => ({ voleurId: id })) });
@@ -242,6 +325,7 @@ export async function runMoe({ genie, voleurs, query, k = 3, onEvent = () => {},
       id: newId("run"), genieId: genie.id, query, routing,
       fragments: [{ voleurId: voleur.id, text: r.text, tokens: r.totalTokens }],
       answer: r.text, tokens, latencyMs: Date.now() - t0, ts: Date.now(),
+      routingStrategy: strategy, routingMode,
     };
     onEvent("final", run);
     return { run, cost };
@@ -374,6 +458,8 @@ export async function runMoe({ genie, voleurs, query, k = 3, onEvent = () => {},
     latencyMs: Date.now() - t0,
     ts: Date.now(),
     bazaar,
+    routingStrategy: strategy,
+    routingMode,
   };
 
   // Rémunération post-fusion si Bazar actif
@@ -464,7 +550,7 @@ export async function judgeQuality({ query, baselineAnswer, caverneAnswer, provi
 // Note: These functions are still hardcoded to DashScope because they are specific to Wanx models.
 // In the future, we could abstract the image/video generation as well, but for now we keep it as is.
 
-async function dsTaskFetch(path, { method = "GET", body } = {}) {
+export async function dsTaskFetch(path, { method = "GET", body } = {}) {
   const init = {
     method,
     headers: {

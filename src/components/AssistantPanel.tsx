@@ -3,6 +3,7 @@ import type { AssistantContext, AssistantMessage, AssistantState, ContractManife
 import { applyChanges, fetchPreview } from "../lib/maxiAssistant";
 import { matchTool, type ToolContext } from "../lib/tabTools";
 import { api } from "../lib/api";
+import NourOrb from "./NourOrb";
 import "./AssistantPanel.css";
 
 interface AssistantPanelProps { context: AssistantContext; }
@@ -138,6 +139,7 @@ export default function AssistantPanel({ context }: AssistantPanelProps) {
       {state.previewResult && <section className="preview-section"><strong>Proposition vérifiée</strong><p>{state.previewResult.manifest.subMoes.length} sous-MoE · {expertCount} experts · {String(state.previewResult.manifest.modelBindings && state.previewResult.manifest.modelBindings.embedding || "text-embedding-v3")}</p><p>{state.previewResult.status} · {state.previewResult.warnings.length} avertissement(s)</p><details><summary>Manifeste</summary><pre>{state.previewResult.preview}</pre></details><div className="apply-actions"><button className="cancel-button" onClick={cancelPreview}>Annuler</button><button className="apply-button" onClick={handleApply} disabled={state.isProcessing}>Appliquer</button></div></section>}
       {state.applyResult && <div className="message assistant-message">Contrat appliqué : {state.applyResult.id} · révision {state.applyResult.revision}</div>}
       <form className="input-area" onSubmit={handleSubmit}><textarea value={inputValue} onChange={(event) => setInputValue(event.target.value)} placeholder="Ex: crée un voleur codeur · forge un génie · lance un benchmark vs qwen-plus · génère une image de renard · va au Camp" disabled={state.isProcessing} /><button className="send-button" type="submit" disabled={!inputValue.trim() || state.isProcessing}>Envoyer</button></form>
+      <NourOrb userId="chef" tabId={context.tabId} tabLabel={context.tabLabel} onGotoTab={context.onGotoTab} />
     </aside>
   );
 }

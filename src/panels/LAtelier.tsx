@@ -32,6 +32,7 @@ export function LAtelier() {
   const [activeId, setActiveId] = useState<string>(FILES_INIT[0].id);
   const [assist, setAssist] = useState("");
   const [output, setOutput] = useState("");
+  const [flash, setFlash] = useState(false);
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [, setSandboxMode] = useState<string>("");
@@ -170,7 +171,12 @@ export function LAtelier() {
       const r = await api.atelierRun(file.content, file.lang);
       const parts = [r.output, r.stderr, r.error].filter(Boolean);
       const meta = [r.timedOut ? "⏱ timeout" : null, r.mode ? `mode: ${r.mode}` : null].filter(Boolean).join(" | ");
-      setOutput((parts.join("\n") + (meta ? `\n— ${meta}` : "")).trim());
+      const out = (parts.join("\n") + (meta ? `\n— ${meta}` : "")).trim();
+      setOutput(out);
+      if (r.mode === "magic" || out.toLowerCase().includes("lampe")) {
+        setFlash(true);
+        setTimeout(() => setFlash(false), 2200);
+      }
     } catch (e) {
       setErr(String(e));
     } finally {
@@ -428,7 +434,8 @@ export function LAtelier() {
           {/* Bottom panels: Terminal/Output and Assistance */}
           <div style={{ display: "flex", flexDirection: "column", borderTop: "1px solid #2a2216", height: "200px" }}>
             {/* Terminal / Output */}
-            <div style={{ flex: 1, overflow: "auto", background: "#0a0907", padding: 10, borderBottom: "1px solid #2a2216" }}>
+            {flash && <div style={{ position: "fixed", inset: 0, background: "radial-gradient(circle at 50% 50%, rgba(255,215,0,.55) 0%, rgba(184,134,11,.12) 45%, transparent 70%)", pointerEvents: "none", zIndex: 9999, transition: "opacity .8s", opacity: flash ? 1 : 0 }} />}
+            <div style={{ position: "relative", flex: 1, overflow: "auto", background: "#0a0907", padding: 10, borderBottom: "1px solid #2a2216" }}>
               <div style={{ opacity: .5, fontSize: 11, marginBottom: 4, letterSpacing: 1 }}>TERMINAL — SORTIE</div>
               {output && <div style={{ whiteSpace: "pre-wrap", fontSize: 13, fontFamily: "monospace" }}>{output}</div>}
               {!output && !busy ? <span style={{ opacity: .4, fontSize: 12 }}>▶ Run pour exécuter — sortie apparaît ici</span> : null}

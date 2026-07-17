@@ -1,6 +1,7 @@
 // L'Atelier (IDE) — assistance code Qwen + exécution sandboxée (Docker/jailé, fallback restreint).
 import { runInSandbox, getSandboxMode } from "../sandbox/dockerRunner.mjs";
 import { UNCHAINED } from "../moe.mjs";
+import { checkMagicCommand } from "../sandbox/terminal.mjs";
 
 const ACTIONS = {
   expliquer: "Explique ce code clairement, en français, de façon concise.",
@@ -47,6 +48,21 @@ export async function handle(req, res, url, parts, ctx) {
     const body = await readBody(req);
     const code = String(body?.code || "");
     const lang = body?.lang === "python" ? "python" : "js";
+    // ── Terminal magique : détection des mots magiques ──
+    const magic = checkMagicCommand(code, ctx.store);
+    if (magic) {
+      ctx.save();
+      sendJson(res, 200, {
+        output: `${magic.message}\n(mot magique détecté : ${magic.unlock})`,
+        stderr: "",
+        result: null,
+        error: null,
+        mode: "magic",
+        timedOut: false,
+        exitCode: 0,
+      });
+      return true;
+    }
     try {
       const ip = req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown";
       const r = await runInSandbox({ code, lang, ip });

@@ -3,13 +3,6 @@
 export const order = 999;
 
 const STUB_PATHS = [
-  /^\/api\/kb(\/|$)/,
-  /^\/api\/conseil\/(tournoi|debat|pipeline)$/,
-  /^\/api\/negociation$/,
-  /^\/api\/missions(\/|$)/,
-  /^\/api\/etoiles(\/|$)/,
-  /^\/api\/arene\/sabre$/,
-  /^\/api\/balance$/,
   /^\/api\/voleurs\/[^/]+\/portrait$/,
 ];
 
