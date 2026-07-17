@@ -3,6 +3,13 @@ export const order = 100;
 export async function handle(req, res, url, parts, ctx) {
   const { sendJson, sendError, readBody } = ctx.helpers;
   if (parts[0] !== "api" || parts[1] !== "arene" || parts[2] !== "sabre") return false;
+  if (req.method === "GET") {
+    ctx.store.sabres ||= [];
+    const recent = ctx.store.sabres.slice(-50).reverse();
+    const wins = recent.filter((d) => d.gagnant === "bande").length;
+    sendJson(res, 200, { duels: recent, total: recent.length, bandeWins: wins, soloWins: recent.length - wins });
+    return true;
+  }
   if (req.method !== "POST") return false;
   const body = await readBody(req);
   const query = String(body?.query || body?.question || "").trim();

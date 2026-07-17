@@ -112,6 +112,12 @@ export const api = {
   atelierRun: (code: string, lang: "js" | "python" = "js") =>
     j<{ output: string; result?: string; error: string | null; stderr?: string; mode?: string; timedOut?: boolean }>("/api/atelier/run", { method: "POST", body: JSON.stringify({ code, lang }) }),
 
+  dinars: () => j<{ balances: { voleurId: string; nom: string; solde: number; mises: number; gains: number; pertes: number }[]; ledger: import("../types").DinarLedgerEntry[] }>("/api/dinars"),
+  dinarMarket: () => j<import("../types").DinarMarketSnapshot[]>("/api/dinars/market"),
+  traitor: () => j<{ verdicts: { runId: string; severity: string; objection?: string; verdict?: string; ts: number }[]; total: number; founded: number; ttu: number }>("/api/traitor"),
+  traitorJudge: (runId: string, verdict: "founded" | "unfounded") =>
+    j<{ ok: boolean }>("/api/traitor/judge", { method: "POST", body: JSON.stringify({ runId, verdict }) }),
+
   fusionProfile: (userId: string) =>
     j<{ userId: string; interactions: number; fusionPct: number; lenUser: number; lenGenie: number; lengthSimilarity: number; lexiconSimilarity: number; lexique: string[]; lexiqueGenie: string[]; voiceHint: string }>(`/api/fusion/${encodeURIComponent(userId)}`),
 
@@ -128,6 +134,13 @@ export const api = {
 
   benchmark: (genieId: string, baseline: string, questions?: string[], baselineProvider?: string) =>
     j<BenchResult>("/api/benchmark", { method: "POST", body: JSON.stringify({ genieId, baseline, questions, baselineProvider }) }),
+
+  sabre: (genieId: string, query: string) =>
+    j<import("../types").SabreDuel>("/api/arene/sabre", { method: "POST", body: JSON.stringify({ genieId, query }) }),
+  listSabres: () => j<{ duels: import("../types").SabreDuel[]; total: number; bandeWins: number; soloWins: number }>("/api/arene/sabre"),
+
+  balance: () =>
+    j<import("../types").BalanceStats>("/api/balance"),
 
   /** Stream SSE de /api/ask. yield {event, data} au fil de l'eau. */
   async *ask(genieId: string, query: string): AsyncGenerator<{ event: string; data: any }> {

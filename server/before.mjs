@@ -60,7 +60,10 @@ function loadStore() {
       etoileJobs: Array.isArray(parsed.etoileJobs) ? parsed.etoileJobs : [],
       unlocked: Array.isArray(parsed.unlocked) ? parsed.unlocked : [],
       sabres: Array.isArray(parsed.sabres) ? parsed.sabres : [],
+      traitorVerdicts: Array.isArray(parsed.traitorVerdicts) ? parsed.traitorVerdicts : [],
       balanceStats: parsed.balanceStats || { requetes: 0, tokensBande: 0, tokensSolo: 0, economiePct: 0, echantillons: 0, ratioEchantillonnage: 5 },
+      dinars: Array.isArray(parsed.dinars) ? parsed.dinars : [],
+      dinarLedger: Array.isArray(parsed.dinarLedger) ? parsed.dinarLedger : [],
       maxiContracts: Array.isArray(parsed.maxiContracts) ? parsed.maxiContracts : [],
     };
     // Migration : ajoute les clés manquantes si data.json ancien
@@ -69,7 +72,7 @@ function loadStore() {
     if (mutated) fs.writeFileSync(DATA_FILE, JSON.stringify(parsed, null, 2), "utf8");
     return fresh;
   } catch {
-    const fresh = { voleurs: [], genies: [], runs: [], profils: {}, kb: [], kbChunks: [], missions: [], negos: [], debats: [], tournois: [], pipelines: [], etoileJobs: [], unlocked: [], sabres: [], maxiContracts: [], balanceStats: { requetes: 0, tokensBande: 0, tokensSolo: 0, economiePct: 0, echantillons: 0, ratioEchantillonnage: 5 } };
+    const fresh = { voleurs: [], genies: [], runs: [], profils: {}, kb: [], kbChunks: [], missions: [], negos: [], debats: [], tournois: [], pipelines: [], etoileJobs: [], unlocked: [], sabres: [], traitorVerdicts: [], maxiContracts: [], dinars: [], dinarLedger: [], balanceStats: { requetes: 0, tokensBande: 0, tokensSolo: 0, economiePct: 0, echantillons: 0, ratioEchantillonnage: 5 } };
     fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
     fs.writeFileSync(DATA_FILE, JSON.stringify(fresh, null, 2), "utf8");
     return fresh;

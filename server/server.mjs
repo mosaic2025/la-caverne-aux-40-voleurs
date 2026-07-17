@@ -32,12 +32,14 @@ import {
   MODEL_PRICES,
   EMBED_DIM,
   UNCHAINED,
+  ensureDinars,
 } from "./moe.mjs";
 const DEFAULT_PROVIDER = "qwen-cloud";
 import { tryRoutes } from "./routes/registry.mjs";
 import { handleMaxiRoutes } from "./routes/maxi_builder.mjs";
 import { ContractRegistry } from "./maxi/registry.mjs";
 import { observe as fusionObserve, voiceHint as fusionVoiceHint } from "./routes/fusion.mjs";
+import { onMoeRunComplete } from "./routes/balance.mjs";
 
 const DATA_FILE = path.join(__dirname, "data.json");
 const PORT = Number(process.env.PORT || 8787);
@@ -62,7 +64,10 @@ function loadStore() {
       etoileJobs: Array.isArray(parsed.etoileJobs) ? parsed.etoileJobs : [],
       unlocked: Array.isArray(parsed.unlocked) ? parsed.unlocked : [],
       sabres: Array.isArray(parsed.sabres) ? parsed.sabres : [],
+      traitorVerdicts: Array.isArray(parsed.traitorVerdicts) ? parsed.traitorVerdicts : [],
       balanceStats: parsed.balanceStats || { requetes: 0, tokensBande: 0, tokensSolo: 0, economiePct: 0, echantillons: 0, ratioEchantillonnage: 5 },
+      dinars: Array.isArray(parsed.dinars) ? parsed.dinars : [],
+      dinarLedger: Array.isArray(parsed.dinarLedger) ? parsed.dinarLedger : [],
       maxiContracts: Array.isArray(parsed.maxiContracts) ? parsed.maxiContracts : [],
     };
     // Migration : ajoute les clés manquantes si data.json ancien
@@ -71,7 +76,7 @@ function loadStore() {
     if (mutated) fs.writeFileSync(DATA_FILE, JSON.stringify(parsed, null, 2), "utf8");
     return fresh;
   } catch {
-    const fresh = { voleurs: [], genies: [], runs: [], profils: {}, kb: [], kbChunks: [], missions: [], negos: [], debats: [], tournois: [], pipelines: [], etoileJobs: [], unlocked: [], sabres: [], maxiContracts: [], balanceStats: { requetes: 0, tokensBande: 0, tokensSolo: 0, economiePct: 0, echantillons: 0, ratioEchantillonnage: 5 } };
+    const fresh = { voleurs: [], genies: [], runs: [], profils: {}, kb: [], kbChunks: [], missions: [], negos: [], debats: [], tournois: [], pipelines: [], etoileJobs: [], unlocked: [], sabres: [], traitorVerdicts: [], maxiContracts: [], dinars: [], dinarLedger: [], balanceStats: { requetes: 0, tokensBande: 0, tokensSolo: 0, economiePct: 0, echantillons: 0, ratioEchantillonnage: 5 } };
     fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
     fs.writeFileSync(DATA_FILE, JSON.stringify(fresh, null, 2), "utf8");
     return fresh;
@@ -307,6 +312,7 @@ const server = http.createServer(async (req, res) => {
           provider,
         };
         store.voleurs.push(voleur);
+        ensureDinars(store, voleur.id); // allocation initiale de dinars
         save();
         return sendJson(res, 201, voleur);
       }
@@ -474,6 +480,8 @@ Règles : 2 à 6 experts regroupés en 1-3 spécialisations. Modeles qwen-cloud:
         if (!models.length) return sendError(res, 400, "au moins un modèle requis");
         const created = [];
         let provider = null;
+        // Allocation initiale de dinars pour chaque nouveau voleur
+        store.dinars ||= [];
         for (const m of models) {
           const specialite = String(m.specialite || m.nom || "").trim();
           const input = {
@@ -496,6 +504,7 @@ Règles : 2 à 6 experts regroupés en 1-3 spécialisations. Modeles qwen-cloud:
           };
           store.voleurs.push(voleur);
           created.push(voleur);
+          ensureDinars(store, voleur.id); // allocation initiale de dinars
           // Track provider consistency
           if (provider === null) {
             provider = providerForModel;
@@ -659,11 +668,13 @@ Règles : 2 à 6 experts regroupés en 1-3 spécialisations. Modeles qwen-cloud:
           onEvent: (type, data) => {
             if (type !== "final") sse(type, data);
           },
+          bazaarCtx: { store, save },
         });
         store.runs.push(run);
         // Borne l'historique persisté
         if (store.runs.length > 500) store.runs = store.runs.slice(-500);
         fusionObserve(store, userId, query.trim(), run.answer); // apprentissage du style
+        onMoeRunComplete(run, { store, save }); // Balance du Marchand : coût bande vs estimation solo
         save();
         sse("final", run);
       } catch (err) {

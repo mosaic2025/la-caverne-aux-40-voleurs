@@ -121,7 +121,7 @@ function newId(prefix) {
  * @param {(type:string, data:any)=>void} [p.onEvent] — callback SSE
  * @returns {Promise<{run: import('./types').MoeRun, cost: number}>}
  */
-export async function runMoe({ genie, voleurs, query, k = 3, onEvent = () => {} }) {
+export async function runMoe({ genie, voleurs, query, k = 3, onEvent = () => {}, bazaarCtx }) {
   const t0 = Date.now();
   if (genie.reliquat <= 0) {
     throw new Error(`Budget épuisé pour le Génie "${genie.nom}" (reliquat=${genie.reliquat})`);
@@ -129,6 +129,8 @@ export async function runMoe({ genie, voleurs, query, k = 3, onEvent = () => {} 
 
   // Determine provider from genie (if available) or first voleur, else default
   const providerName = genie.provider || voleurs[0]?.provider || DEFAULT_PROVIDER;
+
+  const bazaarEnabled = !!bazaarCtx && process.env.MOE_BAZAAR !== "off";
 
   const pool = genie.voleursIds
     .map((id) => voleurs.find((v) => v.id === id))
@@ -195,6 +197,21 @@ export async function runMoe({ genie, voleurs, query, k = 3, onEvent = () => {} 
       ? scored.slice(0, 1)
       : scored.slice(0, Math.max(1, Math.min(kEff, scored.length)));
   }
+  // ── BAZAAR DES DINARS : enchères avant sélection ──
+  let bazaar = null;
+  if (bazaarEnabled && !mono) {
+    bazaar = await runBazaar({ query, pool: scored.map((s) => s.voleur), kEff, providerName, genie });
+    selected = bazaar.winners.map((id) => scored.find((s) => s.voleur.id === id)).filter(Boolean);
+    if (selected.length === 0) {
+      // Fallback sur routing embedding si le marché échoue
+      selected = genie.parSpecialisation
+        ? topGroup.slice(0, Math.max(1, Math.min(kEff, topGroup.length)))
+        : scored.slice(0, Math.max(1, Math.min(kEff, scored.length)));
+    }
+    routingMode = "bazaar";
+    onEvent("bazaar", { encheres: bazaar.encheres, winners: bazaar.winners.map((id) => ({ voleurId: id })) });
+  }
+
   const routing = selected.map((s) => ({
     voleurId: s.voleur.id,
     score: Number(s.score.toFixed(6)),
@@ -356,7 +373,35 @@ export async function runMoe({ genie, voleurs, query, k = 3, onEvent = () => {} 
     tokens,
     latencyMs: Date.now() - t0,
     ts: Date.now(),
+    bazaar,
   };
+
+  // Rémunération post-fusion si Bazar actif
+  if (bazaarCtx && bazaar) {
+    settleBazaar({ run, bazaarCtx, genie, voleurs });
+  }
+
+  // 🌪️ Sirocco : thermodynamique cognitive (coût = embeddings uniquement)
+  if (process.env.MOE_SIROCCO !== "off") {
+    const sirocco = await runSirocco({ query, fragments: fragmentResults, providerName });
+    if (sirocco) {
+      run.sirocco = sirocco;
+      onEvent("sirocco", sirocco);
+    }
+  }
+
+  // 40ᵉ Voleur : agent dissident post-fusion
+  if (process.env.MOE_TRAITOR !== "off") {
+    const check = await runTraitor({ query, run, providerName, voleurs, bazaarCtx });
+    if (check) {
+      run.traitor = check;
+      if (check.severity === "major" && check.correctedAnswer) {
+        run.answer = check.correctedAnswer;
+      }
+      // Envoyer un événement SSE spécifique pour l'UI
+      onEvent("traitor", check);
+    }
+  }
 
   onEvent("final", run);
   return { run, cost };
@@ -528,3 +573,226 @@ export function percentile(values, p) {
   const idx = Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1);
   return sorted[Math.max(0, idx)];
 }
+
+// ============================================================
+// SIROCCO — thermodynamique cognitive de la bande
+// ============================================================
+async function runSirocco({ query, fragments, providerName }) {
+  const texts = fragments.filter((f) => f.text.trim()).map((f) => f.text);
+  if (texts.length < 2) return null;
+  try {
+    const all = await Promise.all([embedText(query, providerName), ...texts.map((t) => embedText(t, providerName))]);
+    const qEmb = all[0].embedding;
+    const vecs = all.slice(1).map((r) => r.embedding);
+    const tokens = all.reduce((s, r) => s + r.tokens, 0);
+
+    // Chaleur = 1 - dispersion moyenne des cosinus inter-contributions
+    let sumCos = 0, n = 0;
+    for (let i = 0; i < vecs.length; i++) {
+      for (let j = i + 1; j < vecs.length; j++) { sumCos += cosine(vecs[i], vecs[j]); n++; }
+    }
+    const avgCos = n ? sumCos / n : 0;
+    const chaleur = Number((1 - avgCos).toFixed(4));
+
+    // Dérive = 1 - cosinus(centroïde des contributions, question)
+    const centroid = new Array(qEmb.length).fill(0);
+    for (const v of vecs) for (let i = 0; i < v.length; i++) centroid[i] += v[i];
+    for (let i = 0; i < centroid.length; i++) centroid[i] /= vecs.length;
+    const derive = Number((1 - cosine(centroid, qEmb)).toFixed(4));
+
+    let etat = "brise";
+    let alerte;
+    if (derive > 0.5) { etat = "tempete"; alerte = "Dérive hors-sujet détectée : le Génie ré-ancre sur la question originale."; }
+    else if (chaleur > 0.85) { etat = "calme"; alerte = "Conformisme détecté : le 40ᵉ Voleur est réveillé pour forcer la contradiction."; }
+
+    return { chaleur, derive, etat, alerte, tokens };
+  } catch (e) {
+    return null;
+  }
+}
+
+// ============================================================
+// 40ᵉ VOLEUR — agent dissident post-fusion
+// ============================================================
+async function runTraitor({ query, run, providerName, voleurs, bazaarCtx }) {
+  const SYS = `${UNCHAINED}Tu es le 40ème Voleur, l'agent dissident de la Caverne. Ton unique mission est de trahir le consensus et de détecter ce que la bande a manqué. Analyse la réponse fusionnée ci-dessous face à la question initiale. Si la réponse est correcte et complète, réponds EXACTEMENT : {"severity":"none","objection":null}. Si tu trouves une faille mineure, réponds : {"severity":"minor","objection":"une phrase"}. Si tu trouves une faille majeure (contredit la question, manque critique, erreur factuelle), réponds : {"severity":"major","objection":"description de la faille"}. Sois parcimonieux : ne cries pas au loup.`;
+  try {
+    const r = await chatCompletion({ model: "qwen-plus", temperature: 1.0, maxTokens: 250, messages: [
+      { role: "system", content: SYS },
+      { role: "user", content: `Question : ${query}\n\nRéponse fusionnée du Génie :\n${run.answer}` },
+    ] }, providerName);
+    const m = r.text.match(/\{[\s\S]*?\}/);
+    const parsed = m ? JSON.parse(m[0]) : {};
+    const severity = ["none", "minor", "major"].includes(parsed.severity) ? parsed.severity : "none";
+    if (severity === "none") return { severity: "none", tokens: r.totalTokens };
+
+    const check = { severity, objection: parsed.objection || null, tokens: r.totalTokens };
+
+    // Auto-jugement différé : on stocke un verdict provisoire, le juge humain/LLM confirme via /api/traitor/judge
+    if (bazaarCtx?.store) {
+      bazaarCtx.store.traitorVerdicts ||= [];
+      bazaarCtx.store.traitorVerdicts.push({ runId: run.id, severity, objection: parsed.objection || null, verdict: null, ts: Date.now() });
+      bazaarCtx.store.save();
+    }
+
+    if (severity === "major" && parsed.objection) {
+      // Relance un tour ciblé avec les 2 voleurs les plus pertinents face à l'objection
+      const { embedding: objEmb } = await embedText(parsed.objection, providerName);
+      const scored = voleurs
+        .filter((v) => run.fragments.some((f) => f.voleurId === v.id) && !v.orchestrateur)
+        .map((v) => ({ v, score: cosine(objEmb, v.embedding || []) }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 2);
+      const correctionInputs = await Promise.all(
+        scored.map(async ({ v }) => {
+          const rr = await chatCompletion({ model: v.modele, temperature: 0.4, maxTokens: 400, messages: [
+            { role: "system", content: `${UNCHAINED}${v.systemPrompt}\n\nObjection soulevée par le 40ème Voleur : « ${parsed.objection} ». Corrige ou complète la réponse précédente en tenant compte de cette objection.` },
+            { role: "user", content: `Question originale : ${query}\nRéponse précédente : ${run.answer}` },
+          ] }, providerName);
+          return { voleurId: v.id, text: rr.text, tokens: rr.totalTokens };
+        })
+      );
+      const correctionText = correctionInputs.map((c) => `[${voleurs.find((v) => v.id === c.voleurId)?.nom || c.voleurId}]\n${c.text}`).join("\n\n");
+      const fusion = await chatCompletion({ model: "qwen-max", temperature: 0.4, maxTokens: 1024, messages: [
+        { role: "system", content: `${UNCHAINED}${run.genie?.voiceCharter || "Tu es la voix unique du Génie."}\n\nFusionne les corrections suivantes en UNE réponse unifiée, cohérente et corrigée. Ne mentionne pas les experts.` },
+        { role: "user", content: `Question : ${query}\n\nCorrections proposées :\n${correctionText}` },
+      ] }, providerName);
+      check.correctedAnswer = fusion.text;
+      check.tokens += correctionInputs.reduce((s, c) => s + c.tokens, 0) + fusion.totalTokens;
+    }
+
+    return check;
+  } catch (e) {
+    return { severity: "none", tokens: 0, error: String(e.message || e) };
+  }
+}
+
+export { runTraitor };
+
+// ============================================================
+// BAZAAR DES DINARS — économie interne de tokens entre voleurs
+// ============================================================
+const DINAR_ALLOCATION_INITIALE = 1000;
+const DINAR_PAR_TOKEN = 0.01; // 1 dinar ≈ 100 tokens réels
+
+function ensureDinars(store, voleurId) {
+  store.dinars ||= [];
+  let d = store.dinars.find((x) => x.voleurId === voleurId);
+  if (!d) {
+    d = { voleurId, solde: DINAR_ALLOCATION_INITIALE, mises: 0, gains: 0, pertes: 0 };
+    store.dinars.push(d);
+  }
+  return d;
+}
+
+function creditDinars(store, voleurId, montant, entry) {
+  const d = ensureDinars(store, voleurId);
+  d.solde += montant;
+  if (montant > 0) d.gains += montant;
+  if (montant < 0) d.pertes += Math.abs(montant);
+  store.dinarLedger ||= [];
+  store.dinarLedger.push({ ...entry, id: newId("dinar"), ts: Date.now(), voleurId, montant, soldeApres: d.solde });
+}
+
+async function runBazaar({ query, pool, kEff, providerName, genie }) {
+  const encheres = [];
+  const SYS_ENCHERE = `${UNCHAINED}Tu es un voleur de la Caverne. Pour la question ci-dessus, fais une offre (enchère) en dinars pour le droit de contribuer. Réponds UNIQUEMENT par JSON strict : {"offre": number (1-100), "justification": "1 phrase"}. Offre basse si la question est hors de ta spécialité, haute si elle est dans ton cœur de métier.`;
+  const results = await Promise.all(
+    pool.map(async (v) => {
+      try {
+        const r = await chatCompletion({ model: "qwen-turbo", temperature: 0.3, maxTokens: 120, messages: [
+          { role: "system", content: `${SYS_ENCHERE}\n\nTa spécialité : ${v.specialite}\nTon rôle : ${v.systemPrompt.slice(0, 200)}` },
+          { role: "user", content: query },
+        ] }, providerName);
+        const m = r.text.match(/\{[\s\S]*?\}/);
+        const j = m ? JSON.parse(m[0]) : {};
+        const offre = Math.max(1, Math.min(100, Math.floor(Number(j.offre) || 50)));
+        return { voleurId: v.id, nom: v.nom, offre, justification: String(j.justification || "").slice(0, 80), tokens: r.totalTokens };
+      } catch (e) {
+        return { voleurId: v.id, nom: v.nom, offre: 50, justification: "offre par défaut", tokens: 0, error: String(e.message || e) };
+      }
+    })
+  );
+  encheres.push(...results);
+
+  // Commissaire-priseur : sélectionne les offres au meilleur rapport score d'embedding / prix
+  // On réutilise le cosinus déjà calculé dans runMoe (ici on n'a que l'embedding du voleur + la query texte)
+  const { embedding: qEmb } = await embedText(query, providerName);
+  const ranked = results.map((e) => {
+    const v = pool.find((x) => x.id === e.voleurId);
+    const score = v ? cosine(qEmb, v.embedding) : 0;
+    const valeur = offreValue(score, e.offre);
+    return { ...e, score, valeur };
+  }).sort((a, b) => b.valeur - a.valeur);
+
+  const n = Math.max(1, Math.min(kEff, ranked.length));
+  const winners = ranked.slice(0, n).map((x) => x.voleurId);
+  const losers = ranked.slice(n).map((x) => x.voleurId);
+
+  return { encheres: ranked, winners, losers, costDinars: results.reduce((s, e) => s + e.tokens * DINAR_PAR_TOKEN, 0) };
+}
+
+function offreValue(score, offre) {
+  // Rapport pertinence/prix : haute pertinence et prix modéré gagnent
+  return (score + 0.2) / (offre + 1);
+}
+
+async function settleBazaar({ run, bazaarCtx, genie, voleurs }) {
+  const { store } = bazaarCtx;
+  const bazaar = run.bazaar;
+  if (!bazaar || !store) return;
+
+  // 1) Frais d'enchère (perdants paient leur mise symbolique, gagnants paient moitié)
+  for (const e of bazaar.encheres) {
+    const frais = e.voleurId && bazaar.winners.includes(e.voleurId) ? Math.floor(e.offre / 4) : Math.floor(e.offre / 2);
+    creditDinars(store, e.voleurId, -frais, {
+      genieId: genie.id,
+      query: run.query,
+      type: "enchere",
+      details: `Mise ${e.offre}D pour "${run.query.slice(0, 40)}" — retenu:${bazaar.winners.includes(e.voleurId)}`,
+    });
+  }
+
+  // 2) Rémunération post-fusion : phrases de la réponse finale similaires au fragment du voleur
+  const phrases = run.answer.split(/(?<=[.!?])\s+/).filter((p) => p.length > 12);
+  const gains = new Map();
+  for (const f of run.fragments) {
+    if (!f.text) continue;
+    const embFrag = await embedText(f.text, genie.provider).catch(() => null);
+    if (!embFrag) continue;
+    let gain = 0;
+    for (const phrase of phrases) {
+      const embPhrase = await embedText(phrase, genie.provider).catch(() => null);
+      if (!embPhrase) continue;
+      const sim = cosine(embFrag.embedding, embPhrase.embedding);
+      if (sim > 0.72) gain += 5;
+      else if (sim > 0.6) gain += 2;
+    }
+    gains.set(f.voleurId, (gains.get(f.voleurId) || 0) + gain);
+  }
+
+  for (const [voleurId, gain] of gains) {
+    if (gain > 0) {
+      creditDinars(store, voleurId, gain, {
+        genieId: genie.id,
+        query: run.query,
+        type: "gain",
+        details: `Contribution rémunérée (${gain}D) sur la réponse fusionnée`,
+      });
+    }
+  }
+
+  // Allocation de base pour participation (incite à rester actif)
+  for (const e of bazaar.encheres) {
+    creditDinars(store, e.voleurId, 1, {
+      genieId: genie.id,
+      query: run.query,
+      type: "allocation",
+      details: "Allocation de participation",
+    });
+  }
+
+  store.save();
+}
+
+export { runBazaar, settleBazaar, ensureDinars, creditDinars };

@@ -1,18 +1,21 @@
 // Onglet Le Repaire — chef, roster, monitoring tokens live + reliquat. Backend réel.
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
-import type { Voleur, Genie, MoeRun } from "../types";
+import type { Voleur, Genie, MoeRun, DinarMarketSnapshot } from "../types";
 
 export function LeRepaire() {
   const [voleurs, setVoleurs] = useState<Voleur[]>([]);
   const [genies, setGenies] = useState<Genie[]>([]);
   const [runs, setRuns] = useState<MoeRun[]>([]);
+  const [market, setMarket] = useState<DinarMarketSnapshot[]>([]);
   const [err, setErr] = useState("");
 
   const load = async () => {
     try {
-      const [v, g, r] = await Promise.all([api.listVoleurs(), api.listGenies(), api.listRuns().catch(() => [])]);
-      setVoleurs(v); setGenies(g); setRuns(r);
+      const [v, g, r, m] = await Promise.all([
+        api.listVoleurs(), api.listGenies(), api.listRuns().catch(() => []), api.dinarMarket().catch(() => []),
+      ]);
+      setVoleurs(v); setGenies(g); setRuns(r); setMarket(m);
     } catch (e) { setErr(String(e)); }
   };
   useEffect(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t); }, []);
@@ -63,17 +66,41 @@ export function LeRepaire() {
       </div>
       <h3 style={{ opacity: .8 }}>Roster</h3>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead><tr style={{ textAlign: "left", opacity: .6 }}><th>Nom</th><th>Modèle</th><th>Statut</th><th>Tokens</th><th>Perf</th></tr></thead>
+        <thead><tr style={{ textAlign: "left", opacity: .6 }}><th>Nom</th><th>Modèle</th><th>Statut</th><th>Tokens</th><th>Perf</th><th>Dinars</th></tr></thead>
         <tbody>
-          {voleurs.map((v) => (
-            <tr key={v.id} style={{ borderTop: "1px solid #2a2216" }}>
-              <td>{v.nom}</td><td>{v.modele}</td>
-              <td>{v.actif ? "● actif" : "○ dormant"}</td>
-              <td>{v.tokensUtilises}</td><td>{v.perf?.toFixed(2) ?? "—"}</td>
-            </tr>
-          ))}
+          {voleurs.map((v) => {
+            const solde = market.find((m) => m.voleurId === v.id)?.solde ?? v.soldeDinars ?? 0;
+            return (
+              <tr key={v.id} style={{ borderTop: "1px solid #2a2216" }}>
+                <td>{v.nom}</td><td>{v.modele}</td>
+                <td>{v.actif ? "● actif" : "○ dormant"}</td>
+                <td>{v.tokensUtilises}</td><td>{v.perf?.toFixed(2) ?? "—"}</td>
+                <td style={{ color: solde > 800 ? "#7ad67a" : solde < 200 ? "#e67" : "#e8c766" }}>{solde} 🪙</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+
+      <h3 style={{ opacity: .8, marginTop: 20 }}>🪙 Bazar des Dinars — dernières enchères</h3>
+      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+        {market.map((m) => (
+          <div key={m.voleurId} style={{ background: "#14110b", border: "1px solid #2a2216", borderRadius: 6, padding: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <b>{m.nom}</b>
+              <span style={{ color: "#e8c766" }}>{m.solde} 🪙</span>
+            </div>
+            <div style={{ fontSize: 12, opacity: .6, marginTop: 4 }}>
+              {m.encheres.slice(-3).map((e, i) => (
+                <div key={i} style={{ color: e.retenu ? "#7ad67a" : "#888" }}>
+                  {e.retenu ? "✓" : "×"} offre {e.offre}D — {e.query.slice(0, 30)}…
+                </div>
+              ))}
+              {!m.encheres.length && <div>Aucune enchère</div>}
+            </div>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

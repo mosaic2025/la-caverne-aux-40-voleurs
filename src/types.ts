@@ -29,6 +29,7 @@ export interface Voleur {
   tokensUtilises: number;      // cumul consommation
   perf?: number;               // score de performance historique [0..1]
   orchestrateur?: boolean;     // true = expert de fusion (exclu du routage, appelé après les fragments)
+  soldeDinars?: number;        // monnaie interne du Bazar des Dinars (1 dinar ≈ 100 tokens réels)
 }
 
 /** Un MoE / Génie = un assemblage de Voleurs fusionnés en une voix unique. */
@@ -58,6 +59,25 @@ export interface MoeRun {
   tokens: { routing: number; selection: number; fragments: number; fusion: number; total: number };
   latencyMs: number;
   ts: number;
+  bazaar?: { encheres: any[]; winners: string[]; losers: string[] };
+  traitor?: TraitorCheck;
+  sirocco?: SiroccoMetrics;
+}
+
+export interface SiroccoMetrics {
+  chaleur: number;       // 0-1, haut = conformisme (tout le monde dit pareil)
+  derive: number;        // 0-1, haut = dérive hors-sujet
+  etat: "brise" | "calme" | "tempete";
+  alerte?: string;
+  tokens: number;        // coût des embeddings (détection quasi gratuite)
+}
+
+export interface TraitorCheck {
+  objection?: string;            // null = "butin propre"
+  severity: "none" | "minor" | "major";
+  verdict?: "founded" | "unfounded";
+  correctedAnswer?: string;
+  tokens: number;
 }
 
 /** Résultat d'un benchmark Caverne vs agent unique (Les Trésors). */
@@ -121,6 +141,23 @@ export interface MoeTrace {
   routing: { voleurId: string; score: number; retenu: boolean }[];
   fusion: { phrase: string; voleurId: string; cosinus: number }[];
   tokens: number;
+}
+export interface DinarLedgerEntry {
+  id: string;
+  ts: number;
+  voleurId: string;
+  genieId: string;
+  query: string;
+  type: "enchere" | "gain" | "perte" | "allocation";
+  montant: number;
+  soldeApres: number;
+  details?: string;
+}
+export interface DinarMarketSnapshot {
+  voleurId: string;
+  nom: string;
+  solde: number;
+  encheres: { query: string; offre: number; retenu: boolean; gain: number }[];
 }
 export interface NegoTour { voleurId: string; position: string; concession?: string; }
 export interface NegoSession { id: string; query: string; tours: NegoTour[]; accord: string; resolu: boolean; ts: number; }

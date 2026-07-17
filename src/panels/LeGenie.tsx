@@ -3,7 +3,7 @@
 // orchestrateur optionnel dédié à la fusion.
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
-import type { Genie, MoeRun, QwenModel, Effort } from "../types";
+import type { Genie, MoeRun, QwenModel, Effort, TraitorCheck, SiroccoMetrics } from "../types";
 
 const QWEN: QwenModel[] = ["qwen-turbo", "qwen-plus", "qwen-max", "qwen-coder-plus", "qwen-vl-plus"];
 const EFFORTS: Effort[] = ["low", "med", "high"];
@@ -44,6 +44,8 @@ export function LeGenie() {
   const [answer, setAnswer] = useState("");
   const [frags, setFrags] = useState<{ voleurId: string; text: string }[]>([]);
   const [run, setRun] = useState<MoeRun | null>(null);
+  const [traitor, setTraitor] = useState<TraitorCheck | null>(null);
+  const [sirocco, setSirocco] = useState<SiroccoMetrics | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [showForge, setShowForge] = useState(false);
@@ -168,15 +170,38 @@ export function LeGenie() {
 
   const ask = async () => {
     if (!genieId || !query.trim()) return;
-    setBusy(true); setErr(""); setAnswer(""); setFrags([]); setRun(null);
+    setBusy(true); setErr(""); setAnswer(""); setFrags([]); setRun(null); setTraitor(null); setSirocco(null);
     try {
       for await (const { event, data } of api.ask(genieId, query)) {
         if (event === "fragment") setFrags((f) => [...f, data]);
-        else if (data && typeof data === "object" && "answer" in data) { setRun(data as MoeRun); setAnswer((data as MoeRun).answer); }
+        else if (event === "sirocco") setSirocco(data as SiroccoMetrics);
+        else if (data && typeof data === "object" && "answer" in data) {
+          const runData = data as MoeRun;
+          setRun(runData);
+          setAnswer(runData.answer);
+          if (runData.traitor) setTraitor(runData.traitor);
+          if (runData.sirocco) setSirocco(runData.sirocco);
+        }
         else if (event === "token" || event === "delta") setAnswer((a) => a + (data.text ?? ""));
         scrollRef.current?.scrollTo(0, 1e9);
       }
     } catch (e) { setErr(String(e)); } finally { setBusy(false); }
+  };
+
+  const badgeSeverity = (s: string) => {
+    const color = s === "major" ? "#e67" : s === "minor" ? "#fb3" : "#8f8";
+    return <span style={{ background: color, color: "#000", padding: "2px 6px", borderRadius: 4, fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>{s}</span>;
+  };
+
+  const siroccoIcon = (etat?: string) => {
+    if (etat === "tempete") return "🌪️";
+    if (etat === "calme") return "🌫️";
+    return "🍃";
+  };
+  const siroccoColor = (etat?: string) => {
+    if (etat === "tempete") return "#e67";
+    if (etat === "calme") return "#fb3";
+    return "#7ad67a";
   };
 
   return (
@@ -327,6 +352,33 @@ export function LeGenie() {
         {run && <p style={{ opacity: .5, fontSize: 12, marginTop: 10 }}>
           {run.tokens.total} tokens (routing {run.tokens.routing} · fragments {run.tokens.fragments} · fusion {run.tokens.fusion}) · {run.latencyMs}ms
         </p>}
+        {sirocco && (
+          <div style={{ marginTop: 10, display: "flex", gap: 12, alignItems: "center", background: "#14110b", border: "1px solid #2a2216", borderRadius: 8, padding: 10 }}>
+            <span style={{ fontSize: 24 }}>{siroccoIcon(sirocco.etat)}</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: siroccoColor(sirocco.etat) }}>
+                Sirocco — {sirocco.etat === "tempete" ? "Tempête de sable" : sirocco.etat === "calme" ? "Calme plat" : "Brise saine"}
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.7 }}>Chaleur {Math.round(sirocco.chaleur * 100)}% · Dérive {Math.round(sirocco.derive * 100)}% · {sirocco.tokens} tokens</div>
+              {sirocco.alerte && <div style={{ fontSize: 12, color: siroccoColor(sirocco.etat), marginTop: 4 }}>{sirocco.alerte}</div>}
+            </div>
+          </div>
+        )}
+        {traitor && traitor.severity !== "none" && (
+          <div style={{ marginTop: 12, border: "1px solid #e67", borderRadius: 8, padding: 10, background: "#1a0f0f" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              🦹 40ᵉ Voleur {badgeSeverity(traitor.severity)}
+              {traitor.verdict && <span style={{ fontSize: 11, opacity: 0.7 }}>({traitor.verdict})</span>}
+            </div>
+            {traitor.objection && <p style={{ fontSize: 13, marginBottom: 6 }}>{traitor.objection}</p>}
+            {traitor.correctedAnswer && traitor.severity === "major" && (
+              <>
+                <div style={{ fontSize: 11, color: "#fb3", marginBottom: 4 }}>Réponse corrigée :</div>
+                <div style={{ whiteSpace: "pre-wrap", fontSize: 13, background: "#14110b", padding: 8, borderRadius: 6 }}>{traitor.correctedAnswer}</div>
+              </>
+            )}
+          </div>
+        )}
       </div>
       <div style={{ display: "flex", gap: 8 }}>
         <textarea value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Sésame, ouvre-toi… (ta requête au Génie)" style={{ flex: 1, minHeight: 50 }} />
