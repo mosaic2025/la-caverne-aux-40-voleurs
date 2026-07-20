@@ -1,5 +1,5 @@
 // ============================================================
-// L78 — Cache OpenRouter / Fable 5 : évite les appels redondants
+// L78 — Cache Fable 5 (Qwen Cloud) : évite les appels redondants
 // ============================================================
 
 import crypto from "node:crypto";

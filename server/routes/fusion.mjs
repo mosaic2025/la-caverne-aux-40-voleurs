@@ -19,7 +19,7 @@ export function observe(store, userId, userMsg, genieAns) {
   for (const w of words(genieAns)) p.lexGenie[w] = (p.lexGenie[w] || 0) + 1;
   p.interactions = n + 1;
   const lenSim = 1 - Math.min(1, Math.abs(p.lenUser - p.lenGenie) / Math.max(p.lenUser, p.lenGenie, 1));
-  const lexSim = jaccard(tLex(p.lexUser), tLex(p.lexGenie));
+  const lexSim = jaccard(topLex(p.lexUser), topLex(p.lexGenie));
   p.fusionPct = Math.round(Math.min(0.85, 0.5 * lenSim + 0.5 * lexSim) * 100); // garde-fou : jamais 100%
   return p;
 }
@@ -27,7 +27,7 @@ export function voiceHint(store, userId) {
   const p = store.profils?.[userId];
   if (!p || !p.interactions) return "";
   const style = p.lenUser < 200 ? "concis et direct" : p.lenUser < 600 ? "équilibré" : "détaillé";
-  const lex = tLex(p.lexUser, 8);
+  const lex = topLex(p.lexUser, 8);
   return `Profil du chef (fusion ${p.fusionPct}%) : style ${style}${lex.length ? `, vocabulaire familier : ${lex.join(", ")}` : ""}. Adapte discrètement ta voix à ce style, sans jamais le mentionner.`;
 }
 

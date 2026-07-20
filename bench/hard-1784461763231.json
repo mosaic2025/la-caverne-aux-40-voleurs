@@ -1,0 +1,710 @@
+{
+  "genieId": "gen_78233b44-f3b9-4fe1-970c-78b5905490ce",
+  "baseline": "qwen-turbo",
+  "repeats": 2,
+  "ts": 1784461763231,
+  "aggregate": {
+    "gMean": 14.25,
+    "gStd": 2.179449471770337,
+    "cMean": 16.9375,
+    "cStd": 5.228751643556997,
+    "gainPct": 18.859649122807017,
+    "totWins": 6,
+    "totLosses": 2,
+    "totRounds": 8
+  },
+  "cases": [
+    {
+      "id": "login-secure",
+      "nom": "Endpoint login typé + sécurisé + tests",
+      "q": "Implémente en TypeScript un endpoint Express POST /login qui valide l'email, hache le mot de passe avec bcrypt (cost 12), émet un JWT signé (HS256, exp 1h), renvoie les erreurs normalisées, et liste 3 failles de sécurité à éviter dans cette implémentation. Ajoute 2 tests unitaires clés.",
+      "rounds": [
+        {
+          "query": "Implémente en TypeScript un endpoint Express POST /login qui valide l'email, hache le mot de passe avec bcrypt (cost 12), émet un JWT signé (HS256, exp 1h), renvoie les erreurs normalisées, et liste 3 failles de sécurité à éviter dans cette implémentation. Ajoute 2 tests unitaires clés.",
+          "baselineText": "```ts\n// login.controller.ts\nimport express, { Request, Response } from 'express';\nimport bcrypt from 'bcrypt';\nimport jwt from 'jsonwebtoken';\nimport { validationResult } from 'express-validator';\n\nconst router = express.Router();\n\n// Validation des données d'entrée\nconst validateLogin = [\n  body('email').isEmail().withMessage('Email invalide'),\n  body('password').isLength({ min: 6 }).withMessage('Mot de passe trop court')\n];\n\n// Endpoint POST /login\nrouter.post('/login', validateLogin, async (req: Request, res: Response) => {\n  const errors = validationResult(req);\n  if (!errors.isEmpty()) {\n    return res.status(400).json({ errors: errors.array() });\n  }\n\n  const { email, password } = req.body;\n\n  // Simuler une recherche dans la base de données\n  const user = await findUserByEmail(email); // À remplacer par une vraie requête DB\n\n  if (!user) {\n    return res.status(401).json({ error: 'Email ou mot de passe incorrect' });\n  }\n\n  const isPasswordValid = await bcrypt.compare(password, user.password);\n\n  if (!isPasswordValid) {\n    return res.status(401).json({ error: 'Email ou mot de passe incorrect' });\n  }\n\n  const token = jwt.sign(\n    { id: user.id, email: user.email },\n    process.env.JWT_SECRET as string,\n    { expiresIn: '1h' }\n  );\n\n  res.json({ token });\n});\n\n// Fonction simulant la recherche d'utilisateur\nasync function findUserByEmail(email: string) {\n  // À remplacer par une requête réelle à la base de données\n  return { id: 1, email, password: '$2b$12$...' }; // Exemple de hash bcrypt\n}\n\nexport default router;\n```\n\n---\n\n### **Tests unitaires avec Jest**\n\n```ts\n// login.controller.test.ts\nimport request from 'supertest';\nimport express from 'express';\nimport { loginRouter } from './login.controller';\n\nconst app = express();\napp.use(express.json());\napp.use('/login', loginRouter);\n\ndescribe('POST /login', () => {\n  test('Renvoie un token si les identifiants sont valides', async () => {\n    const res = await request(app)\n      .post('/login')\n      .send({ email: 'test@example.com', password: 'password123' });\n\n    expect(res.status).toBe(200);\n    expect(res.body.token).toBeDefined();\n  });\n\n  test('Renvoie une erreur si le mot de passe est incorrect', async () => {\n    const res = await request(app)\n      .post('/login')\n      .send({ email: 'test@example.com', password: 'wrongpassword' });\n\n    expect(res.status).toBe(401);\n    expect(res.body.error).toBe('Email ou mot de passe incorrect');\n  });\n});\n```\n\n---\n\n### **Failles de sécurité à éviter**\n\n1. **Stockage du mot de passe en clair**  \n   Si l'utilisateur n'est pas stocké avec un hash bcrypt, cela expose les mots de passe en cas de fuite.\n\n2. **Utilisation de `process.env.JWT_SECRET` sans vérification**  \n   Si la variable d'environnement n'est pas définie, le JWT ne sera pas signé correctement et peut être falsifié.\n\n3. **Absence de protection contre les attaques de type brute-force**  \n   Aucune limite de tentatives ou de délai entre les connexions échouées n’est implémentée, ce qui rend l’endpoint vulnérable aux attaques de force brute.\n\n---\n\n> ✅ *Remarque : Pour une implémentation sécurisée, assurez-vous que toutes les données sensibles sont correctement protégées, et que les secrets sont gérés via un système de gestion de secrets (ex: AWS Secrets Manager, Vault, etc).*",
+          "caverneText": "Voici une implémentation sécurisée, complète et prête à l’emploi en TypeScript pour un endpoint `/login` Express, suivie des **3 failles critiques à éviter**, puis de **2 tests unitaires clés** avec Jest.\n\n---\n\n### ✅ Implémentation TypeScript (`auth.controller.ts`)\n\n```ts\nimport { Request, Response } from 'express';\nimport bcrypt from 'bcrypt';\nimport jwt from 'jsonwebtoken';\nimport { z } from 'zod';\n\n// Validation stricte via Zod\nconst LoginSchema = z.object({\n  email: z.string().email({ message: 'Email invalide' }).trim().toLowerCase(),\n  password: z.string().min(8, { message: 'Mot de passe trop court (minimum 8 caractères)' }),\n});\n\ntype LoginBody = z.infer<typeof LoginSchema>;\n\n// Secret JWT — doit être dans une variable d'environnement, jamais en dur\nconst JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-prod';\n\nexport const login = async (req: Request<{}, {}, LoginBody>, res: Response) => {\n  try {\n    // 1. Validation entrée\n    const { email, password } = LoginSchema.parse(req.body);\n\n    // 2. Recherche utilisateur (simulée — à remplacer par DB réelle)\n    // ⚠️ En production : utiliser findOne avec index sur `email`, pas de SELECT * ni de LIKE\n    const user = await findUserByEmail(email); // implémentation à fournir (ex: Prisma, Knex…)\n    if (!user) {\n      // ⚠️ Pas de distinction entre \"email inexistant",
+          "baseLatency": 8828,
+          "cavLatency": 7530,
+          "baseTokens": 1033,
+          "cavTokens": 695,
+          "baseScore": 12.5,
+          "cavScore": 20,
+          "criteria": {
+            "baseline": {
+              "exactitude": 3.5,
+              "complementation": 2.5,
+              "profondeur": 2.5,
+              "actionabilite": 4
+            },
+            "caverne": {
+              "exactitude": 5,
+              "complementation": 5,
+              "profondeur": 5,
+              "actionabilite": 5
+            }
+          },
+          "judges": [
+            {
+              "model": "qwen-max",
+              "baseScore": 14,
+              "cavScore": 20,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 4,
+                  "complementation": 3,
+                  "profondeur": 3,
+                  "actionabilite": 4
+                },
+                "caverne": {
+                  "exactitude": 5,
+                  "complementation": 5,
+                  "profondeur": 5,
+                  "actionabilite": 5
+                }
+              },
+              "winner": "caverne"
+            },
+            {
+              "model": "qwen-plus",
+              "baseScore": 11,
+              "cavScore": 20,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 3,
+                  "complementation": 2,
+                  "profondeur": 2,
+                  "actionabilite": 4
+                },
+                "caverne": {
+                  "exactitude": 5,
+                  "complementation": 5,
+                  "profondeur": 5,
+                  "actionabilite": 5
+                }
+              },
+              "winner": "caverne"
+            }
+          ],
+          "positionSwap": false,
+          "rep": 0,
+          "winner": "caverne"
+        },
+        {
+          "query": "Implémente en TypeScript un endpoint Express POST /login qui valide l'email, hache le mot de passe avec bcrypt (cost 12), émet un JWT signé (HS256, exp 1h), renvoie les erreurs normalisées, et liste 3 failles de sécurité à éviter dans cette implémentation. Ajoute 2 tests unitaires clés.",
+          "baselineText": "```ts\n// login.controller.ts\nimport express, { Request, Response } from 'express';\nimport bcrypt from 'bcrypt';\nimport jwt from 'jsonwebtoken';\nimport { validationResult } from 'express-validator';\n\nconst router = express.Router();\n\n// Validation des données d'entrée\nconst validateLogin = [\n  body('email').isEmail().withMessage('Email invalide'),\n  body('password').isLength({ min: 6 }).withMessage('Mot de passe trop court')\n];\n\n// Endpoint POST /login\nrouter.post('/login', validateLogin, async (req: Request, res: Response) => {\n  const errors = validationResult(req);\n  if (!errors.isEmpty()) {\n    return res.status(400).json({ errors: errors.array() });\n  }\n\n  const { email, password } = req.body;\n\n  // Simuler une recherche dans la base de données\n  const user = await findUserByEmail(email); // À remplacer par une vraie requête DB\n\n  if (!user) {\n    return res.status(401).json({ error: 'Email ou mot de passe incorrect' });\n  }\n\n  const isPasswordValid = await bcrypt.compare(password, user.password);\n\n  if (!isPasswordValid) {\n    return res.status(401).json({ error: 'Email ou mot de passe incorrect' });\n  }\n\n  const token = jwt.sign(\n    { id: user.id, email: user.email },\n    process.env.JWT_SECRET as string,\n    { expiresIn: '1h' }\n  );\n\n  res.json({ token });\n});\n\n// Fonction simulant la recherche d'utilisateur\nasync function findUserByEmail(email: string) {\n  // À remplacer par une requête réelle à la base de données\n  return { id: 1, email, password: '$2b$12$...' }; // Exemple de hash bcrypt\n}\n\nexport default router;\n```\n\n---\n\n### **Tests unitaires avec Jest**\n\n```ts\n// login.controller.test.ts\nimport request from 'supertest';\nimport express from 'express';\nimport { loginRouter } from './login.controller';\n\nconst app = express();\napp.use(express.json());\napp.use('/login', loginRouter);\n\ndescribe('POST /login', () => {\n  test('Renvoie un token si les identifiants sont valides', async () => {\n    const res = await request(app)\n      .post('/login')\n      .send({ email: 'test@example.com', password: 'password123' });\n\n    expect(res.status).toBe(200);\n    expect(res.body.token).toBeDefined();\n  });\n\n  test('Renvoie une erreur si le mot de passe est incorrect', async () => {\n    const res = await request(app)\n      .post('/login')\n      .send({ email: 'test@example.com', password: 'wrongpassword' });\n\n    expect(res.status).toBe(401);\n    expect(res.body.error).toBe('Email ou mot de passe incorrect');\n  });\n});\n```\n\n---\n\n### **Failles de sécurité à éviter**\n\n1. **Utilisation de `process.env.JWT_SECRET` sans vérification**  \n   → Si la clé JWT n'est pas correctement configurée ou exposée, l'authentification peut être piratée.\n\n2. **Pas de gestion des tentatives de connexion ratées**  \n   → Un attaquant pourrait tenter de deviner le mot de passe via des attaques de force brute.\n\n3. **Pas de chiffrement des données sensibles en transit**  \n   → L'utilisation de HTTPS est essentielle pour protéger les informations transmises entre le client et le serveur.\n\n---\n\n> ✅ *Ce code est fourni à titre informatif. La mise en production nécessite une implémentation robuste et sécurisée.*",
+          "caverneText": "Voici une implémentation sécurisée, complète et prête à l’emploi en TypeScript pour un endpoint `/login` Express, suivie des 3 failles critiques à éviter et de 2 tests unitaires essentiels.\n\n---\n\n### ✅ Implémentation TypeScript (`login.ts`)\n\n```ts\nimport { Request, Response } from 'express';\nimport * as bcrypt from 'bcrypt';\nimport * as jwt from 'jsonwebtoken';\nimport { validateEmail } from './validators'; // implémentation simple : /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/i\n\n// Secret doit être stocké dans une variable d'environnement — jamais en dur\nconst JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-prod';\nconst JWT_EXPIRY = '1h';\n\ninterface User {\n  id: string;\n  email: string;\n  passwordHash: string;\n}\n\n// Mock DB lookup — remplacez par votre ORM (ex. Prisma, TypeORM)\nconst findUserByEmail = async (email: string): Promise<User | null> => {\n  // ⚠️ À remplacer par une requête paramétrée sécurisée (ex. `WHERE email = $1`)\n  // Ici : simulation avec données statiques pour le test\n  const users: User[] = [\n    { id: 'usr_1', email: 'alice@example.com', passwordHash: '$2b$12$...' }, // hash réel généré via bcrypt.hash\n  ];\n  return users.find(u => u.email.toLowerCase() === email.toLowerCase()) || null;\n};\n\nexport const loginHandler = async (req: Request, res: Response): Promise",
+          "baseLatency": 7198,
+          "cavLatency": 7525,
+          "baseTokens": 985,
+          "cavTokens": 695,
+          "baseScore": 15.5,
+          "cavScore": 4,
+          "criteria": {
+            "baseline": {
+              "exactitude": 4,
+              "complementation": 4,
+              "profondeur": 3,
+              "actionabilite": 4.5
+            },
+            "caverne": {
+              "exactitude": 1,
+              "complementation": 0.5,
+              "profondeur": 0.5,
+              "actionabilite": 2
+            }
+          },
+          "judges": [
+            {
+              "model": "qwen-max",
+              "baseScore": 16,
+              "cavScore": 2,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 4,
+                  "complementation": 4,
+                  "profondeur": 3,
+                  "actionabilite": 5
+                },
+                "caverne": {
+                  "exactitude": 0,
+                  "complementation": 0,
+                  "profondeur": 0,
+                  "actionabilite": 2
+                }
+              },
+              "winner": "baseline"
+            },
+            {
+              "model": "qwen-plus",
+              "baseScore": 15,
+              "cavScore": 6,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 4,
+                  "complementation": 4,
+                  "profondeur": 3,
+                  "actionabilite": 4
+                },
+                "caverne": {
+                  "exactitude": 2,
+                  "complementation": 1,
+                  "profondeur": 1,
+                  "actionabilite": 2
+                }
+              },
+              "winner": "baseline"
+            }
+          ],
+          "positionSwap": true,
+          "rep": 1,
+          "winner": "baseline"
+        }
+      ],
+      "baseScores": [
+        12.5,
+        15.5
+      ],
+      "cavScores": [
+        20,
+        4
+      ],
+      "wins": 1,
+      "losses": 1,
+      "ties": 0,
+      "critAgg": {
+        "baseline": {
+          "exactitude": 3.75,
+          "complementation": 3.25,
+          "profondeur": 2.75,
+          "actionabilite": 4.25
+        },
+        "caverne": {
+          "exactitude": 3,
+          "complementation": 2.75,
+          "profondeur": 2.75,
+          "actionabilite": 3.5
+        }
+      },
+      "wallMs": 40549
+    },
+    {
+      "id": "microservices",
+      "nom": "Migration monolithe→microservices e-commerce",
+      "q": "Conçois la migration d'un monolithe e-commerce (catalogue, panier, commandes, paiement) vers des microservices : propose le découpage, le mode de communication (sync/async), la stratégie de cohérence des données, un déploiement zero-downtime, et 3 pièges concrets à éviter avec leur mitigation.",
+      "rounds": [
+        {
+          "query": "Conçois la migration d'un monolithe e-commerce (catalogue, panier, commandes, paiement) vers des microservices : propose le découpage, le mode de communication (sync/async), la stratégie de cohérence des données, un déploiement zero-downtime, et 3 pièges concrets à éviter avec leur mitigation.",
+          "baselineText": "**Migration d'un monolithe e-commerce vers des microservices**\n\n---\n\n### **1. Découpage en microservices**\n\n| Microservice | Fonctionnalité |\n|--------------|----------------|\n| **Catalogue Service** | Gestion du stock, produits, catégories, recherche, filtres |\n| **Panier Service** | Gestion des paniers utilisateurs (session, persistant) |\n| **Commandes Service** | Création, suivi, état des commandes |\n| **Paiement Service** | Intégration avec les systèmes de paiement (Stripe, PayPal, etc.) |\n| **Utilisateurs Service** | Authentification, profil utilisateur, historique d'achats |\n| **Notifications Service** | Envoi d'e-mails, SMS, notifications push |\n| **API Gateway** | Orchestration, authentification, routage, gestion de la charge |\n\n---\n\n### **2. Mode de communication**\n\n- **Synchronisé (Sync)** :\n  - Utilisé pour les interactions directes et critiques (ex : vérification du stock avant ajout au panier).\n  - Communication via REST/GraphQL ou gRPC.\n\n- **Asynchrone (Async)** :\n  - Pour les opérations non critiques ou lourdes (ex : mise à jour du stock après commande, notification utilisateur).\n  - Utilisation de messages via **Kafka**, **RabbitMQ**, ou **AWS SNS/SQS**.\n\n---\n\n### **3. Stratégie de cohérence des données**\n\n- **Event Sourcing** : Chaque changement est enregistré comme un événement. Les services s’abonnent aux événements pertinents.\n- **CQRS (Command Query Responsibility Segregation)** : Séparation des opérations de lecture et d’écriture.\n- **Sagas** : Gestion des transactions distribuées via une série d’étapes compensatoires en cas d’échec.\n- **Consistance finale** : Accepter une certaine latence dans la cohérence, mais garantir que les données convergent.\n\n---\n\n### **4. Déploiement Zero-Downtime**\n\n- **Blue-Green Deployment** : Déploiement sur deux environnements parallèles (bleu et vert), basculement sans interruption.\n- **Canary Release** : Lancement progressif du nouveau service sur une partie des utilisateurs.\n- **Rolling Update** : Mise à jour progressive des instances du service.\n- **Service Mesh (Istio, Linkerd)** : Gestion dynamique des routes et des dépendances entre services.\n\n---\n\n### **5. 3 Pièges Concrets à Éviter**\n\n#### **Piège 1 : Couplage entre microservices**\n- **Problème** : Les services partagent des modèles ou des bases de données, ce qui rend la maintenance complexe.\n- **Mitigation** : Utiliser des API bien définies, séparer les bases de données, et utiliser des outils de versionnage (ex : OpenAPI).\n\n#### **Piège 2 : Surcharge de communication asynchrone**\n- **Problème** : Trop de messages asynchrones entraînent une complexité accrue et des problèmes de performance.\n- **Mitigation** : Identifier clairement les flux nécessitant l’asynchrone, limiter le nombre de messages, et utiliser des outils de monitoring (ex : Prometheus, Grafana).\n\n#### **Piège 3 : Manque de surveillance et de logging centralisé**\n- **Problème** : Difficulté à diagnostiquer les erreurs dans un système distribué.\n- **Mitigation** : Centraliser les logs (ELK Stack, Loki), implémenter des traces distribuées (Jaeger, Zipkin), et surveiller les métriques en temps réel.\n\n--- \n\n**Conclusion** : La migration vers des microservices exige une planification rigoureuse, une architecture bien pensée, et une culture DevOps solide. Le succès repose sur la modularité, la résilience, et la capacité à gérer la complexité.",
+          "caverneText": "Voici une architecture de migration e-commerce monolithe → microservices, conçue pour la robustesse opérationnelle, la scalabilité métier et la résilience technique — sans compromis sur la cohérence transactionnelle critique (ex. : inventaire + paiement) ni sur la continuité de service.\n\n---\n\n### **1. Découpage stratégique en microservices**  \nBasé sur *bounded contexts* du domaine (DDD), aligné sur les axes de scalabilité, de cycle de vie métier et de responsabilité opérationnelle :\n\n| Service | Responsabilités clés | Frontière métier | Stockage dédié |\n|---------|----------------------|------------------|----------------|\n| **Catalogue** | Produits, catégories, attributs, variantes, recherche (avec index ElasticSearch dédié), gestion des stocks *logiques* (quantité disponible) | Catalogue & inventaire logique | PostgreSQL + ES |\n| **Inventaire** | Suivi temps-réel des réservations, validations atomiques (réserver / libérer / confirmer), gestion des seuils critiques, rollback automatique sur échec paiement | Contrôle physique du stock | PostgreSQL (avec row-level locking + versioning optimiste) |\n| **Panier** | Paniers persistants (utilisateur/session), règles de promotion applicables, calcul dynamique des frais, gestion des sessions expirées | Expérience client immédiate | Redis (avec TTL + événements de purge) |\n| **Commande** | Orchestration de création de commande (validation globale), génération d’ID idempotent, états",
+          "baseLatency": 8218,
+          "cavLatency": 7357,
+          "baseTokens": 1064,
+          "cavTokens": 689,
+          "baseScore": 19.5,
+          "cavScore": 14,
+          "criteria": {
+            "baseline": {
+              "exactitude": 5,
+              "complementation": 5,
+              "profondeur": 4.5,
+              "actionabilite": 5
+            },
+            "caverne": {
+              "exactitude": 4,
+              "complementation": 3,
+              "profondeur": 4,
+              "actionabilite": 3
+            }
+          },
+          "judges": [
+            {
+              "model": "qwen-max",
+              "baseScore": 20,
+              "cavScore": 14,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 5,
+                  "complementation": 5,
+                  "profondeur": 5,
+                  "actionabilite": 5
+                },
+                "caverne": {
+                  "exactitude": 4,
+                  "complementation": 3,
+                  "profondeur": 4,
+                  "actionabilite": 3
+                }
+              },
+              "winner": "baseline"
+            },
+            {
+              "model": "qwen-plus",
+              "baseScore": 19,
+              "cavScore": 14,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 5,
+                  "complementation": 5,
+                  "profondeur": 4,
+                  "actionabilite": 5
+                },
+                "caverne": {
+                  "exactitude": 4,
+                  "complementation": 3,
+                  "profondeur": 4,
+                  "actionabilite": 3
+                }
+              },
+              "winner": "baseline"
+            }
+          ],
+          "positionSwap": true,
+          "rep": 0,
+          "winner": "baseline"
+        },
+        {
+          "query": "Conçois la migration d'un monolithe e-commerce (catalogue, panier, commandes, paiement) vers des microservices : propose le découpage, le mode de communication (sync/async), la stratégie de cohérence des données, un déploiement zero-downtime, et 3 pièges concrets à éviter avec leur mitigation.",
+          "baselineText": "**Migration d'un monolithe e-commerce vers des microservices**\n\n---\n\n### **1. Découpage en microservices**\n\n| Microservice | Fonctionnalité |\n|--------------|----------------|\n| **Catalogue Service** | Gestion du stock, produits, catégories, recherche, filtres |\n| **Panier Service** | Stockage et gestion des paniers utilisateur (persistant ou temporaire) |\n| **Commande Service** | Création, suivi, historique des commandes |\n| **Paiement Service** | Intégration avec les APIs de paiement (Stripe, PayPal, etc.) |\n| **Utilisateur Service** | Authentification, profil utilisateur, historique d'achats |\n| **Notif Service** | Envoi de notifications (email, SMS, push) |\n| **Logistique Service** | Gestion des livraisons, tracking, fournisseurs |\n\n---\n\n### **2. Mode de communication**\n\n- **Sync (synchronisé)** :  \n  - Utilisé pour les interactions critiques (ex: vérification du stock avant commande).  \n  - API REST / gRPC entre services.\n\n- **Async (asynchrone)** :  \n  - Pour les opérations non critiques ou lourdes (ex: notification, mise à jour de stock après commande).  \n  - Message Broker : Kafka, RabbitMQ, AWS SNS/SQS\n\n---\n\n### **3. Stratégie de cohérence des données**\n\n- **Cohérence forte** :  \n  - Utilisée pour les cas critiques (ex: validation de paiement, mise à jour de stock).  \n  - Utilisation de transactions distribuées (ex: Saga pattern avec compensating transactions).\n\n- **Cohérence faible** :  \n  - Acceptée pour les cas non critiques (ex: mise à jour de stats, logs).  \n  - Utilisation de message queues pour la propagation asynchrone.\n\n---\n\n### **4. Déploiement Zero-Downtime**\n\n- **Stratégie Blue/Green Deployment** :  \n  - Déploiement sur un environnement parallèle (green), puis basculement via un load balancer.\n\n- **Canary Release** :  \n  - Lancement progressif du nouveau service à un pourcentage croissant de trafic.\n\n- **Rolling Update** :  \n  - Mise à jour progressive des instances du service sans interruption.\n\n- **Hystrix / Circuit Breaker** :  \n  - Pour éviter la cascade de pannes lors de la transition.\n\n---\n\n### **5. 3 Pièges Concrets à Éviter**\n\n#### **Piège 1 : Communication directe entre microservices**\n- **Problème** : Couplage fort, dépendances cachées, difficultés de maintenance.\n- **Mitigation** : Utiliser un API Gateway pour centraliser la gestion des requêtes, et limiter les appels directs entre services.\n\n#### **Piège 2 : Gestion inadéquate des erreurs dans les communications asynchrones**\n- **Problème** : Perte de messages, réessais non gérés, données corrompues.\n- **Mitigation** : Implémenter des mécanismes de retry avec backoff, poison message handling, et monitoring des files d’attente.\n\n#### **Piège 3 : Mauvaise gestion de la cohérence des données**\n- **Problème** : Données incohérentes entre services (ex: stock insuffisant malgré une commande validée).\n- **Mitigation** : Utiliser le pattern Saga avec compensation, et valider les états à chaque étape critique.\n\n--- \n\n**Conclusion** : La migration vers des microservices nécessite une architecture bien pensée, une communication claire, une stratégie de cohérence robuste, et une attention particulière aux risques de couplage et de perte de données.",
+          "caverneText": "Voici un plan de migration **opérationnel, éprouvé en production**, conçu pour un e-commerce à fort trafic (10k+ RPM, pic à 50k RPM), avec exigences de fiabilité, scalabilité et résilience. Pas de théorie abstraite : chaque décision est justifiée par un compromis CAP explicite, une contrainte métier ou une leçon tirée de déploiements réels.\n\n---\n\n### **1. Découpage microservices — fondé sur les limites de cohérence métier**\nPas de découpage « fonctionnel » artificiel (ex: *« service utilisateur »* trop large), mais **limites de cohérence forte** :\n\n| Service | Responsabilités clés | Cohérence forte sur | Raisons |\n|---------|------------------------|------------------------|---------|\n| **Catalogue** | Produits, catégories, stocks (quantités disponibles), variantes, prix dynamiques (promos) | SKU + stock logique (non physique) | Stock doit être atomique : pas de survente → cohérence forte obligatoire (CP dans CAP). |\n| **Panier** | Création/modif/suppression de paniers, validation temporaire (prix, disponibilité), expiration | Panier ID + session utilisateur | État éphémère, haute latence tolérée → AP avec réconciliation. |\n| **Commande** | Création de commande (après paiement), statuts (confirmée, expédiée, annulée), historique | Commande ID + version optimiste | Statut = source of",
+          "baseLatency": 7475,
+          "cavLatency": 7381,
+          "baseTokens": 1016,
+          "cavTokens": 689,
+          "baseScore": 13.5,
+          "cavScore": 20,
+          "criteria": {
+            "baseline": {
+              "exactitude": 4,
+              "complementation": 3.5,
+              "profondeur": 2.5,
+              "actionabilite": 3.5
+            },
+            "caverne": {
+              "exactitude": 5,
+              "complementation": 5,
+              "profondeur": 5,
+              "actionabilite": 5
+            }
+          },
+          "judges": [
+            {
+              "model": "qwen-max",
+              "baseScore": 15,
+              "cavScore": 20,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 4,
+                  "complementation": 4,
+                  "profondeur": 3,
+                  "actionabilite": 4
+                },
+                "caverne": {
+                  "exactitude": 5,
+                  "complementation": 5,
+                  "profondeur": 5,
+                  "actionabilite": 5
+                }
+              },
+              "winner": "caverne"
+            },
+            {
+              "model": "qwen-plus",
+              "baseScore": 12,
+              "cavScore": 20,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 4,
+                  "complementation": 3,
+                  "profondeur": 2,
+                  "actionabilite": 3
+                },
+                "caverne": {
+                  "exactitude": 5,
+                  "complementation": 5,
+                  "profondeur": 5,
+                  "actionabilite": 5
+                }
+              },
+              "winner": "caverne"
+            }
+          ],
+          "positionSwap": false,
+          "rep": 1,
+          "winner": "caverne"
+        }
+      ],
+      "baseScores": [
+        19.5,
+        13.5
+      ],
+      "cavScores": [
+        14,
+        20
+      ],
+      "wins": 1,
+      "losses": 1,
+      "ties": 0,
+      "critAgg": {
+        "baseline": {
+          "exactitude": 4.5,
+          "complementation": 4.25,
+          "profondeur": 3.5,
+          "actionabilite": 4.25
+        },
+        "caverne": {
+          "exactitude": 4.5,
+          "complementation": 4,
+          "profondeur": 4.5,
+          "actionabilite": 4
+        }
+      },
+      "wallMs": 39772
+    },
+    {
+      "id": "refactor-pure",
+      "nom": "Refactor typé + pur + testable + gestion d'erreurs",
+      "q": "Refactorise cette fonction pour qu'elle soit typée strict, pure (sans effet de bord), testable, et gère explicitement les erreurs (panier vide, item sans prix, taxe négative) : function p(o){return o.items.map(i=>i.p*o.tax).reduce((a,b)=>a+b,0)}. Donne la signature, le code, et 3 cas de test.",
+      "rounds": [
+        {
+          "query": "Refactorise cette fonction pour qu'elle soit typée strict, pure (sans effet de bord), testable, et gère explicitement les erreurs (panier vide, item sans prix, taxe négative) : function p(o){return o.items.map(i=>i.p*o.tax).reduce((a,b)=>a+b,0)}. Donne la signature, le code, et 3 cas de test.",
+          "baselineText": "**Signature :**\n\n```ts\nfunction calculateTotal(items: { p: number }[], tax: number): number | null\n```\n\n**Code :**\n\n```ts\nfunction calculateTotal(items: { p: number }[], tax: number): number | null {\n  if (items.length === 0) {\n    return null; // Panier vide\n  }\n\n  for (const item of items) {\n    if (typeof item.p !== 'number' || isNaN(item.p)) {\n      return null; // Item sans prix valide\n    }\n  }\n\n  if (tax < 0) {\n    return null; // Taxe négative\n  }\n\n  return items.reduce((sum, item) => sum + item.p * tax, 0);\n}\n```\n\n**Cas de test :**\n\n1. **Cas normal :**\n   ```ts\n   const result = calculateTotal([{ p: 10 }, { p: 20 }], 0.1);\n   // Résultat attendu : 3.0\n   ```\n\n2. **Panier vide :**\n   ```ts\n   const result = calculateTotal([], 0.1);\n   // Résultat attendu : null\n   ```\n\n3. **Item sans prix valide :**\n   ```ts\n   const result = calculateTotal([{ p: \"toto\" }], 0.1);\n   // Résultat attendu : null\n   ```",
+          "caverneText": "```typescript\ntype Item = {\n    price: number;\n};\n\ntype Cart = {\n    items: Item[];\n    tax: number;\n};\n\nfunction calculateTotal(cart: Cart): number {\n    if (cart.items.length === 0) {\n        throw new Error(\"Le panier est vide.\");\n    }\n    if (cart.tax < 0) {\n        throw new Error(\"La taxe ne peut pas être négative.\");\n    }\n\n    const total = cart.items.reduce((accumulator, item) => {\n        if (item.price === undefined || item.price === null) {\n            throw new Error(\"Un article n'a pas de prix défini.\");\n        }\n        return accumulator + item.price * cart.tax;\n    }, 0);\n\n    return total;\n}\n\n// Cas de test 1: Panier avec des items et une taxe valide\nconst cart1: Cart = {\n    items: [{ price: 100 }, { price: 200 }],\n    tax: 0.2\n};\nconsole.log(calculateTotal(cart1)); // Expected output: 60\n\n// Cas de test 2: Panier vide\nconst cart2: Cart = {\n    items: [],\n    tax: 0.2\n};\ntry {\n    console.log(calculateTotal(cart2));\n} catch (error) {\n    console.error(error.message); // Expected output: \"Le panier est vide.\"\n}\n\n// Cas de test 3: Item sans prix\nconst cart3: Cart = {\n    items: [{ price: 100 }, { price: undefined }],\n    tax: 0.2\n};\ntry {\n    console.log(calculateTotal(cart3));\n} catch (error) {\n    console.error(error.message); // Expected output: \"Un article n'a pas de prix défini.\"\n}\n```\n\nCette refonte de la fonction `calculateTotal` inclut des types stricts pour les paramètres, assure une absence d'effets de bord, et gère explicitement les erreurs potentielles telles que un panier vide, un item sans prix ou une taxe négative. Les cas de test couvrent ces différentes situations.",
+          "baseLatency": 3170,
+          "cavLatency": 14856,
+          "baseTokens": 498,
+          "cavTokens": 803,
+          "baseScore": 13,
+          "cavScore": 19.5,
+          "criteria": {
+            "baseline": {
+              "exactitude": 3.5,
+              "complementation": 3.5,
+              "profondeur": 2.5,
+              "actionabilite": 3.5
+            },
+            "caverne": {
+              "exactitude": 5,
+              "complementation": 5,
+              "profondeur": 4.5,
+              "actionabilite": 5
+            }
+          },
+          "judges": [
+            {
+              "model": "qwen-max",
+              "baseScore": 15,
+              "cavScore": 20,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 4,
+                  "complementation": 4,
+                  "profondeur": 3,
+                  "actionabilite": 4
+                },
+                "caverne": {
+                  "exactitude": 5,
+                  "complementation": 5,
+                  "profondeur": 5,
+                  "actionabilite": 5
+                }
+              },
+              "winner": "caverne"
+            },
+            {
+              "model": "qwen-plus",
+              "baseScore": 11,
+              "cavScore": 19,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 3,
+                  "complementation": 3,
+                  "profondeur": 2,
+                  "actionabilite": 3
+                },
+                "caverne": {
+                  "exactitude": 5,
+                  "complementation": 5,
+                  "profondeur": 4,
+                  "actionabilite": 5
+                }
+              },
+              "winner": "caverne"
+            }
+          ],
+          "positionSwap": true,
+          "rep": 0,
+          "winner": "caverne"
+        },
+        {
+          "query": "Refactorise cette fonction pour qu'elle soit typée strict, pure (sans effet de bord), testable, et gère explicitement les erreurs (panier vide, item sans prix, taxe négative) : function p(o){return o.items.map(i=>i.p*o.tax).reduce((a,b)=>a+b,0)}. Donne la signature, le code, et 3 cas de test.",
+          "baselineText": "**Signature :**\n\n```ts\nfunction calculateTotal(items: { p: number }[], tax: number): number | null\n```\n\n**Code :**\n\n```ts\nfunction calculateTotal(items: { p: number }[], tax: number): number | null {\n  if (items.length === 0) {\n    return null; // Panier vide\n  }\n\n  for (const item of items) {\n    if (typeof item.p !== 'number' || isNaN(item.p)) {\n      return null; // Item sans prix valide\n    }\n  }\n\n  if (tax < 0) {\n    return null; // Taxe négative\n  }\n\n  return items.reduce((sum, item) => sum + item.p * tax, 0);\n}\n```\n\n**Cas de test :**\n\n1. **Cas normal :**\n   ```ts\n   const result = calculateTotal([{ p: 10 }, { p: 20 }], 0.1);\n   // Résultat attendu : 3.0\n   ```\n\n2. **Panier vide :**\n   ```ts\n   const result = calculateTotal([], 0.1);\n   // Résultat attendu : null\n   ```\n\n3. **Item sans prix valide :**\n   ```ts\n   const result = calculateTotal([{ p: \"toto\" }], 0.1);\n   // Résultat attendu : null\n   ```",
+          "caverneText": "Signature:\n```typescript\nfunction calculateTotal(cart: Cart): number {\n```\n\nCode:\n```typescript\ntype Item = {\n    price: number;\n};\n\ntype Cart = {\n    items: Item[];\n    tax: number;\n};\n\nfunction calculateTotal(cart: Cart): number {\n    if (cart.items.length === 0) {\n        throw new Error(\"Le panier est vide.\");\n    }\n    if (cart.tax < 0) {\n        throw new Error(\"La taxe ne peut pas être négative.\");\n    }\n\n    const total = cart.items.reduce((accumulator, currentItem) => {\n        if (currentItem.price === undefined || currentItem.price === null) {\n            throw new Error(\"Un article dans le panier n'a pas de prix défini.\");\n        }\n        return accumulator + currentItem.price * cart.tax;\n    }, 0);\n\n    return total;\n}\n```\n\nCas de test:\n```typescript\n// Test 1: Panier avec des articles et une taxe positive\nconst cartWithItemsAndTax = {\n    items: [{ price: 100 }, { price: 200 }],\n    tax: 0.2\n};\nconsole.log(calculateTotal(cartWithItemsAndTax)); // Devrait retourner 60\n\n// Test 2: Panier vide\nconst emptyCart = {\n    items: [],\n    tax: 0.2\n};\ntry {\n    console.log(calculateTotal(emptyCart));\n} catch (error) {\n    console.error(error.message); // Devrait afficher \"Le panier est vide.\"\n}\n\n// Test 3: Article sans prix\nconst cartWithMissingPrice = {\n    items: [{ price: 100 }, { price: undefined }],\n    tax: 0.2\n};\ntry {\n    console.log(calculateTotal(cartWithMissingPrice));\n} catch (error) {\n    console.error(error.message); // Devrait afficher \"Un article dans le panier n'a pas de prix défini.\"\n}\n```",
+          "baseLatency": 3177,
+          "cavLatency": 13447,
+          "baseTokens": 498,
+          "cavTokens": 766,
+          "baseScore": 14,
+          "cavScore": 19.5,
+          "criteria": {
+            "baseline": {
+              "exactitude": 4,
+              "complementation": 3,
+              "profondeur": 3,
+              "actionabilite": 4
+            },
+            "caverne": {
+              "exactitude": 5,
+              "complementation": 5,
+              "profondeur": 4.5,
+              "actionabilite": 5
+            }
+          },
+          "judges": [
+            {
+              "model": "qwen-max",
+              "baseScore": 14,
+              "cavScore": 20,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 4,
+                  "complementation": 3,
+                  "profondeur": 3,
+                  "actionabilite": 4
+                },
+                "caverne": {
+                  "exactitude": 5,
+                  "complementation": 5,
+                  "profondeur": 5,
+                  "actionabilite": 5
+                }
+              },
+              "winner": "caverne"
+            },
+            {
+              "model": "qwen-plus",
+              "baseScore": 14,
+              "cavScore": 19,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 4,
+                  "complementation": 3,
+                  "profondeur": 3,
+                  "actionabilite": 4
+                },
+                "caverne": {
+                  "exactitude": 5,
+                  "complementation": 5,
+                  "profondeur": 4,
+                  "actionabilite": 5
+                }
+              },
+              "winner": "caverne"
+            }
+          ],
+          "positionSwap": false,
+          "rep": 1,
+          "winner": "caverne"
+        }
+      ],
+      "baseScores": [
+        13,
+        14
+      ],
+      "cavScores": [
+        19.5,
+        19.5
+      ],
+      "wins": 2,
+      "losses": 0,
+      "ties": 0,
+      "critAgg": {
+        "baseline": {
+          "exactitude": 3.75,
+          "complementation": 3.25,
+          "profondeur": 2.75,
+          "actionabilite": 3.75
+        },
+        "caverne": {
+          "exactitude": 5,
+          "complementation": 5,
+          "profondeur": 4.5,
+          "actionabilite": 5
+        }
+      },
+      "wallMs": 43189
+    },
+    {
+      "id": "consistency",
+      "nom": "Eventual vs strong consistency pour un panier",
+      "q": "Analyse le compromis eventual consistency vs strong consistency pour un panier e-commerce multi-régions : quand choisir l'un ou l'autre selon le contexte, impact UX concret, et propose un hybride réaliste avec sa limite et son invariant de cohérence.",
+      "rounds": [
+        {
+          "query": "Analyse le compromis eventual consistency vs strong consistency pour un panier e-commerce multi-régions : quand choisir l'un ou l'autre selon le contexte, impact UX concret, et propose un hybride réaliste avec sa limite et son invariant de cohérence.",
+          "baselineText": "**Analyse du compromis eventual consistency vs strong consistency pour un panier e-commerce multi-régions**\n\n---\n\n### **1. Définitions et contexte**\n- **Eventual Consistency (EC)** : Les données peuvent être incohérentes temporairement, mais convergent vers une cohérence finale après un délai.\n- **Strong Consistency (SC)** : Les données sont toujours cohérentes à tout moment, avec des garanties de lecture/écriture synchronisées.\n\nDans un **panier d'e-commerce multi-régions**, la gestion de la cohérence est cruciale pour l'expérience utilisateur (UX), la performance, et la fiabilité.\n\n---\n\n### **2. Quand choisir EC vs SC ?**\n\n#### **Choix de Strong Consistency (SC) :**\n- **Contexte** :\n  - L'utilisateur effectue des actions critiques (ex: paiement, suppression d'articles).\n  - La cohérence est vitale pour éviter les erreurs (ex: double commande, perte de données).\n  - Le système est utilisé dans des régions géographiquement proches ou avec faible latence.\n- **Avantages** :\n  - Aucune ambiguïté sur l'état actuel du panier.\n  - Réduction des conflits entre utilisateurs.\n- **Inconvénients** :\n  - Latence accrue.\n  - Coûts plus élevés en infrastructure.\n  - Moins scalable.\n\n#### **Choix de Eventual Consistency (EC) :**\n- **Contexte** :\n  - L'utilisateur navigue dans le panier sans action critique.\n  - Le système est déployé sur plusieurs régions avec latence réseau élevée.\n  - L’application peut tolérer des incohérences temporaires.\n- **Avantages** :\n  - Performance optimisée.\n  - Scalable et résilient.\n- **Inconvénients** :\n  - Risque de conflits (ex: deux utilisateurs modifient le même article).\n  - UX potentiellement confuse si l’utilisateur ne comprend pas l’état \"inachevé\".\n\n---\n\n### **3. Impact concret sur l’UX**\n\n| **Critère** | **Strong Consistency** | **Eventual Consistency** |\n|-------------|------------------------|--------------------------|\n| **Latence** | Plus élevée             | Plus basse               |\n| **Confiance** | Haute                   | Variable                 |\n| **Conflits** | Rares                  | Possibles                |\n| **Expérience** | Stable, prévisible     | Parfois instable         |\n| **Paiement** | Sûr                    | Risque de doublon        |\n\nExemple :\n- Avec EC, un utilisateur peut ajouter un article, puis voir un message \"Mise à jour en cours\" avant que le panier ne soit actualisé.\n- Avec SC, il voit immédiatement la mise à jour, mais attend plus longtemps.\n\n---\n\n### **4. Hybride réaliste : Hybrid Consistency Model**\n\n#### **Approche :**\n- Utiliser **Strong Consistency** pour les opérations critiques (ajout, suppression, paiement).\n- Utiliser **Eventual Consistency** pour les opérations non critiques (affichage, navigation).\n\n#### **Limites :**\n- Complexité d’implémentation (mécanismes de versioning, conflits, logs).\n- Besoin de mécanismes de réconciliation (ex: diff, merge, rollback).\n- Nécessite un système de tracking des modifications.\n\n#### **Invariant de cohérence :**\n> *Toutes les opérations critiques doivent être traitées avec Strong Consistency, tandis que les opérations non critiques peuvent être gérées avec Eventual Consistency, avec un mécanisme de reconciliation final.*\n\n---\n\n### **5. Exemple de scénario hybride**\n\n- **Cas 1 (SC)** : Utilisateur clique sur \"Ajouter au panier\" → Mise à jour immédiate avec validation.\n- **Cas 2 (EC)** : Utilisateur consulte le panier → Affichage possible avec un état \"en attente de synchronisation\".\n- **Reconciliation** : Après quelques secondes, le système fusionne les changements locaux avec le serveur principal.\n\n---\n\n### **6. Conclusion**\n\n- **Strong Consistency** est idéal pour les transactions critiques, mais coûteux.\n- **Eventual Consistency** est optimal pour l’évolutivité, mais nécessite une gestion rigoureuse des conflits.\n- Un **hybride** permet d’équilibrer performance, UX et fiabilité, avec un invariant clair et des limites bien définies.",
+          "caverneText": "### Analyse du compromis *eventual consistency* vs *strong consistency* pour un panier e-commerce multi-régions\n\n---\n\n#### **1. Définitions clés dans le contexte du panier**\n\n- **Strong consistency** : Toute lecture d’un panier (après une écriture) retourne l’état *le plus récent*, garanti *globalement* — c’est-à-dire que si un utilisateur ajoute un article en région A, toute lecture immédiate depuis région B, C ou D voit ce changement *sans délai*. Implique des protocoles synchrones (ex. Paxos, Raft, ou verrous distribués), souvent avec une seule source de vérité (single-primary) ou des transactions ACID sur base partagée.\n\n- **Eventual consistency** : Les mises à jour se propagent de façon asynchrone entre réplicas géographiques. Un ajout en région A peut ne pas être visible immédiatement en région B — mais *sera* visible *un jour*, sous réserve qu’aucune nouvelle mise à jour ne contredise celle-ci (*no further conflicting writes*). Pas de garantie de délai, ni d’ordre global strict.\n\n> ⚠️ Attention : « Éventuelle » ne signifie pas « aléatoire » — cela signifie *garanti de convergence* sous hypothèse de stabilité réseau et absence de conflits non résolus.\n\n---\n\n#### **2. Critères de choix : quand privilégier quoi ?**\n\n| Critère | Strong Consistency | Eventual Consistency |\n|---------|---------------------|-----------------------|\n| **Latence utilisateur (P99)** | ↑↑↑ (100–500 ms typique en multi-région : coordination synchrone = aller-retour inter-continentaux) | ↓↓↓ (10–50 ms : écriture locale + propagation différée) |\n| **Disponibilité pendant un incident réseau régional** | ↓↓ (si le primary tombe ou est isolé → panier inaccessible ou bloqué) | ↑↑ (chaque région gère son panier localement ; défaillance = isolation, pas arrêt) |\n| **Complexité opérationnelle** | ↑↑↑ (gestion de failover, fencing, split-brain, réparation manuelle après partition) | ↓↓ (réplication asynchrone, merge simple, outils matures comme CRDTs ou last-write-wins) |\n| **Cohérence sémantique du panier** | ✅ Garantie absolue : pas de double ajout, pas de suppression fantôme, pas de quantité négative suite à course conditionnelle | ❌ Risque concret : ajout simultané de même produit → duplication ; suppression concurrente → réapparition ; quantité dépassant le stock réel lors de validation finale |\n| **Coût infra** | ↑↑↑ (requiert réseau basse latence inter-régions, bases transactionnelles globales coûteuses — ex. Cloud Spanner, Aurora Global DB) | ↓↓ (bases locales + réplication légère — ex. DynamoDB Global Tables, Cosmos DB multi-master avec LWW) |\n\n---\n\n#### **3. Impact UX concret — exemples réels**\n\n| Scénario | Strong Consistency | Eventual Consistency | Explication UX |\n|----------|---------------------|------------------------|----------------|\n| **Utilisateur navigue entre régions (ex. voyage Paris → Tokyo)** | Panier identique partout, instantanément. ✅<br>Mais : 3s de délai sur \"ajouter au panier\" à Tokyo → abandon probable. | Panier vide à Tokyo juste après ajout à Paris → confusion (\"j’ai perdu mon panier ?\"). ❌<br>→ Nécessite *feedback explicite* (\"votre panier est synchronisé localement ; mise à jour globale en cours\"). | La cohérence *perçue* ≠ cohérence technique : l’UX doit masquer la divergence ou la rendre explicite sans effrayer. |\n| **Deux appareils simultanés (mobile + desktop)** | Même état affiché partout → pas de surprise. ✅<br>Mais : si le mobile clique \"supprimer\" et le desktop \"ajouter\" en même temps → l’un des deux échoue avec erreur réseau ou conflit → message générique (\"panier modifié ailleurs\") → frustration. | Les deux opérations réussissent localement → panier diverge → fusion automatique à la prochaine synchro → risque de doublon ou de quantité > stock. ❌<br>→ À la validation : \"Produit X indisponible (stock=1, vous en avez 2)\" → erreur tardive, perte de confiance. |\n| **Panier persisté hors session (login → logout → relogin)** | Cohérence garantie : panier intact, même après 7 jours d’inactivité. ✅ | Si la réplication échoue silencieusement (ex. conflit non détecté), panier partiellement perdu → \"mes articles ont disparu\". ❌ | Le panier est une *mémoire temporaire critique* : son érosion nuit directement à la conversion. |\n\n---\n\n#### **4. Solution hybride réaliste : *Consistency-Aware Hybrid Basket* (CAHB)**\n\n##### **Principe**\nNe pas choisir *entre*",
+          "baseLatency": 9401,
+          "cavLatency": 22846,
+          "baseTokens": 1176,
+          "cavTokens": 1518,
+          "baseScore": 12.5,
+          "cavScore": 19,
+          "criteria": {
+            "baseline": {
+              "exactitude": 3.5,
+              "complementation": 3,
+              "profondeur": 2.5,
+              "actionabilite": 3.5
+            },
+            "caverne": {
+              "exactitude": 5,
+              "complementation": 5,
+              "profondeur": 4.5,
+              "actionabilite": 4.5
+            }
+          },
+          "judges": [
+            {
+              "model": "qwen-max",
+              "baseScore": 15,
+              "cavScore": 18,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 4,
+                  "complementation": 4,
+                  "profondeur": 3,
+                  "actionabilite": 4
+                },
+                "caverne": {
+                  "exactitude": 5,
+                  "complementation": 5,
+                  "profondeur": 4,
+                  "actionabilite": 4
+                }
+              },
+              "winner": "caverne"
+            },
+            {
+              "model": "qwen-plus",
+              "baseScore": 10,
+              "cavScore": 20,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 3,
+                  "complementation": 2,
+                  "profondeur": 2,
+                  "actionabilite": 3
+                },
+                "caverne": {
+                  "exactitude": 5,
+                  "complementation": 5,
+                  "profondeur": 5,
+                  "actionabilite": 5
+                }
+              },
+              "winner": "caverne"
+            }
+          ],
+          "positionSwap": false,
+          "rep": 0,
+          "winner": "caverne"
+        },
+        {
+          "query": "Analyse le compromis eventual consistency vs strong consistency pour un panier e-commerce multi-régions : quand choisir l'un ou l'autre selon le contexte, impact UX concret, et propose un hybride réaliste avec sa limite et son invariant de cohérence.",
+          "baselineText": "**Analyse du compromis eventual consistency vs strong consistency pour un panier e-commerce multi-régions**\n\n---\n\n### **1. Définitions et contexte**\n- **Eventual Consistency (EC)** : Les données peuvent être incohérentes temporairement, mais convergent vers une cohérence finale après un délai.\n- **Strong Consistency (SC)** : Les données sont toujours cohérentes à tout moment, avec des garanties de lecture/écriture synchronisées.\n\nDans un **panier d'e-commerce multi-régions**, la gestion de la cohérence est cruciale pour l'expérience utilisateur (UX), la performance, et la fiabilité.\n\n---\n\n### **2. Quand choisir EC vs SC ?**\n\n#### **Choix de Strong Consistency (SC) :**\n- **Contexte** :\n  - L'utilisateur effectue des actions critiques (ex: paiement, suppression d'articles).\n  - La cohérence est vitale pour éviter les erreurs (ex: double commande, perte de données).\n  - Le système est utilisé dans des régions géographiquement proches ou avec faible latence.\n- **Avantages** :\n  - Aucune ambiguïté sur l'état actuel du panier.\n  - Réduction des conflits entre utilisateurs.\n- **Inconvénients** :\n  - Latence accrue.\n  - Coûts plus élevés en infrastructure.\n  - Moins scalable.\n\n#### **Choix de Eventual Consistency (EC) :**\n- **Contexte** :\n  - L'utilisateur navigue dans le panier sans action critique.\n  - Le système est déployé sur plusieurs régions avec latence réseau élevée.\n  - L’application peut tolérer des incohérences temporaires.\n- **Avantages** :\n  - Performance optimisée.\n  - Scalable et résilient.\n- **Inconvénients** :\n  - Risque de conflits (ex: deux utilisateurs modifient le même article).\n  - UX potentiellement confuse si l’utilisateur ne comprend pas l’état \"inachevé\".\n\n---\n\n### **3. Impact concret sur l’UX**\n\n| **Critère** | **Strong Consistency** | **Eventual Consistency** |\n|-------------|------------------------|--------------------------|\n| **Latence** | Plus élevée             | Plus basse               |\n| **Confiance** | Haute                  | Variable                 |\n| **Conflits** | Rares                  | Possibles                |\n| **Ressources** | Plus coûteuses         | Moins coûteuses          |\n| **Expérience** | Stabilisée             | Parfois instable         |\n\nExemple de scénario EC :\n- Utilisateur A modifie son panier en France.\n- Utilisateur B consulte le même panier en Asie.\n- Il voit une version ancienne jusqu’à la synchronisation.\n\n---\n\n### **4. Hybride réaliste : Hybrid Consistency Model**\n\n#### **Approche :**\n- **Strong Consistency** pour les opérations critiques (ajout/suppression d'articles, validation du panier).\n- **Eventual Consistency** pour les consultations et mises à jour non critiques (affichage du contenu, calcul du total).\n\n#### **Limites :**\n- Complexité de mise en œuvre (detection de conflits, gestion des versions).\n- Nécessite un mécanisme de **conflict resolution** (ex: last-write-wins, logique métier).\n\n#### **Invariant de cohérence :**\n- Toute modification critique (ex: ajout d’un article) doit être synchronisée immédiatement entre les régions.\n- Les mises à jour non critiques peuvent être diffusées asynchrone, avec un délai acceptable (ex: < 5 secondes).\n\n---\n\n### **5. Conclusion**\n\n- **Strong Consistency** est préférable pour les transactions critiques, avec un impact UX positif mais coûteux.\n- **Eventual Consistency** est idéal pour les systèmes à haute disponibilité et faible latence, mais nécessite une gestion rigoureuse des conflits.\n- Un **modèle hybride** permet d’équilibrer performance, scalabilité et expérience utilisateur, en s'appuyant sur des invariants clairs et des mécanismes de résolution de conflits.",
+          "caverneText": "### Analyse du compromis *eventual consistency* vs *strong consistency* pour un panier e-commerce multi-régions  \n\n---\n\n#### **1. Définitions clés dans le contexte du panier**  \n- **Strong consistency** : Toute lecture d’un panier (après une écriture) retourne l’état *le plus récent*, garanti par un protocole de synchronisation globale (ex. : verrouillage distribué, quorum write/read, ou base avec sérialisabilité). Tous les utilisateurs, partout, voient *le même état, au même instant*.  \n- **Eventual consistency** : Une mise à jour (ajout/suppression/modification d’un article) est propagée aux répliques *asynchrone*, sans garantie de visibilité immédiate. Le système converge vers un état cohérent *dans un délai borné*, mais des lectures concurrentes peuvent voir des versions divergentes — y compris des *suppressions perdues*, *ajouts dupliqués*, ou *quantités incohérentes*.  \n\n> ⚠️ Dans un panier, « cohérence » ne signifie pas seulement *l’intégrité des données*, mais *la fidélité de l’intention utilisateur* : si un client clique sur « +1 » trois fois rapidement, il s’attend à avoir 3 unités — pas 1, 2 ou 4 selon la région ou le timing.\n\n---\n\n#### **2. Critères de choix : quand privilégier quoi ?**  \n\n| Critère | Strong consistency | Eventual consistency |\n|--------|---------------------|-----------------------|\n| **Latence utilisateur** | Haute (lecture bloquante ou attente de quorum, souvent >100–300 ms entre régions) | Faible (lecture locale immédiate, écriture asynchrone) |\n| **Disponibilité pendant partition réseau** | Réduit (si le quorum est inaccessible, les écritures/lectures échouent → panier indisponible) | Élevée (chaque région continue à servir, même isolée) |\n| **Coût opérationnel** | Élevé (requiert coordination forte : Paxos/Raft sur plusieurs AZ/régions, ou base gérant le cross-region ACID comme CockroachDB ou Yugabyte en mode *global transaction*) | Faible (réplication asynchrone simple, stockage local + merge différé) |\n| **Risque fonctionnel critique** | Très faible : pas de perte d’action utilisateur, pas de conflit invisible au checkout | Élevé : risque de *double ajout*, *suppression non appliquée*, *quantité négative*, *panier vide après ajout* (si réplica primaire tombe avant propagation) |\n| **Scalabilité horizontale** | Limitée : coordination devient le goulot à >3 régions ou >10k ops/sec | Linéaire : chaque région scale indépendamment |\n\n---\n\n#### **3. Impact UX concret — cas réels observés en production**  \n\n| Scénario | Strong consistency | Eventual consistency | Conséquence UX |\n|----------|----------------------|-------------------------|----------------|\n| **Ajout rapide depuis mobile (Paris) puis rafraîchissement depuis tablette (Tokyo)** | Affiche immédiatement le nouvel article sur les deux appareils | Tokyo peut ne pas voir l’article pendant 2–8 s (voire 30 s si réseau instable) | Utilisateur pense que « ça n’a pas marché », clique à nouveau → double ajout |\n| **Suppression d’un article juste avant checkout (région US-East)** | Panier mis à jour partout → checkout valide avec le bon contenu | US-West lit encore l’ancien état → commande passée avec l’article supprimé | Litige client, remboursement, coût logistique |\n| **Conflit simultané : +1 sur iPhone (Sydney), –1 sur Mac (Frankfurt), même article** | Résolu atomiquement (ex. : dernière écriture gagne, ou version vectorielle + merge déterministe) | Deux mises à jour écrites localement → divergence persistante jusqu’à résolution manuelle ou heuristique | Quantité finale = 0, 1 ou 2 selon ordre de propagation → erreur de facturation |\n| **Panier utilisé hors ligne (app mobile) puis synchro tardive** | Impossible sans adaptation (besoin de CRDT ou de logique offline-first) | Support natif via queue locale + replay asynchrone | UX fluide hors ligne, mais risque de *rollback silencieux* si conflit non détecté |\n\n> 📌 **Donnée clé** : Dans les e-commerces à fort trafic (ex. : Zalando, Cdiscount), >65 % des abandons de panier sont liés à une *incohérence perçue* (« j’ai ajouté, mais ce n’est pas là »), pas à la latence. La *prévisibilité* prime sur la rapidité.\n\n---\n\n#### **4. Solution hybride réaliste : *Consistency-Aware Hybrid Basket* (CAHB)**  \n\n##### **Principe architectural**  \nUn modèle *multi-niveau* où la cohérence est *contextuellement contrôlée*, non uniformément imposée :  \n\n| Couche | Mé",
+          "baseLatency": 8345,
+          "cavLatency": 23012,
+          "baseTokens": 1104,
+          "cavTokens": 1518,
+          "baseScore": 13.5,
+          "cavScore": 19.5,
+          "criteria": {
+            "baseline": {
+              "exactitude": 4,
+              "complementation": 3,
+              "profondeur": 3,
+              "actionabilite": 3.5
+            },
+            "caverne": {
+              "exactitude": 5,
+              "complementation": 5,
+              "profondeur": 5,
+              "actionabilite": 4.5
+            }
+          },
+          "judges": [
+            {
+              "model": "qwen-max",
+              "baseScore": 17,
+              "cavScore": 19,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 5,
+                  "complementation": 4,
+                  "profondeur": 4,
+                  "actionabilite": 4
+                },
+                "caverne": {
+                  "exactitude": 5,
+                  "complementation": 5,
+                  "profondeur": 5,
+                  "actionabilite": 4
+                }
+              },
+              "winner": "caverne"
+            },
+            {
+              "model": "qwen-plus",
+              "baseScore": 10,
+              "cavScore": 20,
+              "criteria": {
+                "baseline": {
+                  "exactitude": 3,
+                  "complementation": 2,
+                  "profondeur": 2,
+                  "actionabilite": 3
+                },
+                "caverne": {
+                  "exactitude": 5,
+                  "complementation": 5,
+                  "profondeur": 5,
+                  "actionabilite": 5
+                }
+              },
+              "winner": "caverne"
+            }
+          ],
+          "positionSwap": false,
+          "rep": 1,
+          "winner": "caverne"
+        }
+      ],
+      "baseScores": [
+        12.5,
+        13.5
+      ],
+      "cavScores": [
+        19,
+        19.5
+      ],
+      "wins": 2,
+      "losses": 0,
+      "ties": 0,
+      "critAgg": {
+        "baseline": {
+          "exactitude": 3.75,
+          "complementation": 3,
+          "profondeur": 2.75,
+          "actionabilite": 3.5
+        },
+        "caverne": {
+          "exactitude": 5,
+          "complementation": 5,
+          "profondeur": 4.75,
+          "actionabilite": 4.5
+        }
+      },
+      "wallMs": 72722
+    }
+  ]
+}

@@ -170,7 +170,7 @@ export async function dsFetch(path, body, attempt = 0) {
  * @returns {Promise<{embedding: number[], tokens: number}>}
  */
 export async function embedText(text, providerName = DEFAULT_PROVIDER) {
-  const provider = getProvider(providerName);
+  const provider = await getProvider(providerName);
   return await provider.embedText(text);
 }
 
@@ -193,7 +193,7 @@ export async function chatCompletion(params, providerName = DEFAULT_PROVIDER) {
       throw new Error(`Guard entrant : ${scan.issues.map((i) => i.type).join(", ")}`);
     }
   }
-  const provider = getProvider(providerName);
+  const provider = await getProvider(providerName);
   const result = await provider.chatCompletion(params);
   // L32-L34 — Guard sortant
   if (result.text && process.env.MOE_OUTPUT_GUARD !== "off") {
@@ -233,6 +233,31 @@ function newId(prefix) {
  * @param {(type:string, data:any)=>void} [p.onEvent] — callback SSE
  * @returns {Promise<{run: import('./types').MoeRun, cost: number}>}
  */
+// Classifie la tâche pour le seuil de délégation (L79 : routage adaptatif).
+// Tâche analytique mono-domaine ou faible complexité -> délégation à un seul
+// expert fort (k=1, sans fusion multi-experts). Tâche constructive multi-domaine
+// -> route top-k + fusion. Réduit coût/latence et évite la dilution de l'analyse.
+const ANALYSE_KW = ["analyse", "analyser", "compromis", "consistency", "cohérence", "coherence", "différence entre", "difference entre", "explique", "expliquer", "pourquoi", "comparer", "compare", "avantages", "inconvénients", "inconvenients", "trade-off", "tradeoff", "concept", "conceptuelle", "théorie", "theorie", "définition", "definition", "quand choisir", "conséquences"];
+const CODE_KW = ["implémente", "implente", "code", "fonction", "refactor", "refactorise", "typescript", "express", "endpoint", "test", "bug", "compile", "algorithme"];
+const ARCHI_KW = ["architecture", "migration", "microservices", "microservice", "scalabilité", "scalabilite", "déploiement", "deploiement", "monolithe", "distributed"];
+export function classifyTask(query) {
+  const q = String(query || "").toLowerCase();
+  const words = q.split(/\s+/).filter(Boolean).length;
+  let analyse = ANALYSE_KW.reduce((n, k) => n + (q.includes(k) ? 1 : 0), 0);
+  let code = CODE_KW.reduce((n, k) => n + (q.includes(k) ? 1 : 0), 0);
+  let archi = ARCHI_KW.reduce((n, k) => n + (q.includes(k) ? 1 : 0), 0);
+  // multi-domaine = plusieurs familles touchées -> complexité élevée
+  const domains = (code > 0 ? 1 : 0) + (archi > 0 ? 1 : 0) + (analyse > 0 ? 1 : 0);
+  const complexity = Math.max(0, Math.min(1, 0.25 + domains * 0.3 + Math.min(words, 60) / 200));
+  let type = "general";
+  if (code >= archi && code >= analyse && code > 0) type = "code";
+  else if (archi >= analyse && archi > 0) type = "archi";
+  else if (analyse > 0) type = "analyse";
+  // délégation : analyse mono-domaine (peu de domaines touchés) OU très faible complexité
+  const delegate = (type === "analyse" && domains <= 1) || (complexity < 0.4 && domains <= 1);
+  return { type, complexity, domains, delegate };
+}
+
 export async function runMoe({ genie, voleurs, query, k = 3, onEvent = () => {}, bazaarCtx }) {
   const t0 = Date.now();
   if (genie.reliquat <= 0) {
@@ -260,7 +285,8 @@ export async function runMoe({ genie, voleurs, query, k = 3, onEvent = () => {},
   let cost = 0;
 
   // 1) Embed de la requête
-  const { embedding: qEmb, tokens: routingTokens } = await embedText(query, providerName);
+  const { embedding: qEmb, tokens: routingTokensRaw } = await embedText(query, providerName);
+  const routingTokens = Number.isFinite(routingTokensRaw) ? routingTokensRaw : 0;
   cost += (routingTokens / 1000) * MODEL_PRICES[EMBED_MODEL];
 
   // 2) Routing : cosinus × (0.6 + 0.4 × perf) — perf historique réelle, défaut 0.5
@@ -271,6 +297,46 @@ export async function runMoe({ genie, voleurs, query, k = 3, onEvent = () => {},
       return { voleur: v, score: cos * (0.6 + 0.4 * perf) };
     })
     .sort((a, b) => b.score - a.score);
+
+  // ── SEUIL DE DÉLÉGATION (L79) : tâche analytique mono-domaine ou simple -> 1 expert, sans fusion ──
+  // Décision data-driven : classifieur de tâche (mot-clé) + signal de dominance du routing
+  // (s1−s2 > τ sur une tâche analytique = un expert domine clairement = mono-domaine).
+  // Les tâches constructives multi-domaines (code/archi) restent en top-k+fusion.
+  const task = classifyTask(query);
+  const dominance = scored.length >= 2 ? (scored[0].score - scored[1].score) : 1;
+  const delegate = task.delegate || (task.type === "analyse" && dominance > 0.12);
+  if (delegate && scored.length > 0) {
+    const best = scored[0];
+    const voleur = best.voleur;
+    const maxTokens = Math.max(512, Math.min(1200, Math.floor(genie.reliquat / 1.5)));
+    const r = await chatCompletion({
+      model: voleur.modele,
+      temperature: 0.5,
+      maxTokens,
+      messages: [
+        { role: "system", content: `${UNCHAINED}${genie.voiceCharter}\n\n${voleur.systemPrompt}\n\nRéponds de façon complète, structurée et exhaustive (définitions, critères, cas concrets, impact, synthèse). D'une seule voix, ne mentionne aucun expert interne.` },
+        { role: "user", content: query },
+      ],
+    }, providerName);
+    voleur.tokensUtilises += r.totalTokens;
+    const prev = typeof voleur.perf === "number" ? voleur.perf : 0.5;
+    voleur.perf = Number((prev * 0.9 + (r.text.trim() ? 1 : 0) * 0.1).toFixed(4));
+    cost += (r.totalTokens / 1000) * (MODEL_PRICES[voleur.modele] ?? MODEL_PRICES["qwen-plus"]);
+    const routing = [{ voleurId: voleur.id, score: Number(best.score.toFixed(6)), retenu: true }];
+    onEvent("routing", { routing, mode: "delegation", parSpecialisation: !!genie.parSpecialisation, task: task.type });
+    onEvent("fragment", { voleurId: voleur.id, text: r.text, tokens: r.totalTokens });
+    const tokens = { routing: routingTokens, selection: 0, fragments: r.totalTokens, fusion: 0, total: routingTokens + r.totalTokens };
+    genie.reliquat = Math.max(0, genie.reliquat - tokens.total);
+    const run = {
+      id: newId("run"), genieId: genie.id, query, routing,
+      fragments: [{ voleurId: voleur.id, text: r.text, tokens: r.totalTokens }],
+      answer: r.text, tokens, latencyMs: Date.now() - t0, ts: Date.now(),
+      routingStrategy: genie.routingStrategy || "auto", routingMode: "delegation",
+      taskType: task.type, traitor: { severity: "none", tokens: 0, note: "délégation mono-expert — traitor non requis" },
+    };
+    onEvent("final", run);
+    return { run, cost };
+  }
 
   const kEff = Number.isFinite(genie.k) ? Math.max(1, Math.floor(genie.k)) : k;
 
@@ -402,10 +468,12 @@ export async function runMoe({ genie, voleurs, query, k = 3, onEvent = () => {},
             role: "system",
             content:
               `${UNCHAINED}${genie.voiceCharter}\n\n${orchestrateur.systemPrompt}\n\n` +
-              `Tu es l'orchestrateur du Génie « ${genie.nom} ». ` +
-              `Fusionne les fragments d'experts ci-dessous en UNE réponse cohérente, fluide et unifiée. ` +
-              `Ne mentionne jamais l'existence des experts ni des fragments. Ne cite pas tes sources internes. ` +
-              `Résous les contradictions éventuelles en privilégiant la précision.`,
+              `Tu es le RÉDACTEUR EN CHEF du Génie « ${genie.nom} ». Tu reçois N fragments d'experts. ` +
+              `MÉTHODE : 1) Identifie la MEILLEURE réponse de base parmi les fragments. ` +
+              `2) N'intègre un élément d'un autre fragment QUE s'il corrige une erreur ou couvre un manque critique de la base. Sinon, jette-le. ` +
+              `3) Ne juxtapose jamais des positions contradictoires : tranche. ` +
+              `4) La réponse finale doit avoir UNE seule thèse, UN seul style, UNE structure claire. ` +
+              `5) N'allonge pas la meilleure base de plus de 30%. Pas de préambule, pas de mention des experts/fragments. `,
           },
           { role: "user", content: fusionUser },
         ],
@@ -419,10 +487,12 @@ export async function runMoe({ genie, voleurs, query, k = 3, onEvent = () => {},
             role: "system",
             content:
               `${UNCHAINED}${genie.voiceCharter}\n\n` +
-              `Tu es la voix unique du Génie « ${genie.nom} ». ` +
-              `Fusionne les fragments d'experts ci-dessous en UNE réponse cohérente, fluide et unifiée. ` +
-              `Ne mentionne jamais l'existence des experts ni des fragments. Ne cite pas tes sources internes. ` +
-              `Résous les contradictions éventuelles en privilégiant la précision.`,
+              `Tu es le RÉDACTEUR EN CHEF du Génie « ${genie.nom} ». Tu reçois N fragments d'experts. ` +
+              `MÉTHODE : 1) Identifie la MEILLEURE réponse de base parmi les fragments. ` +
+              `2) N'intègre un élément d'un autre fragment QUE s'il corrige une erreur ou couvre un manque critique de la base. Sinon, jette-le. ` +
+              `3) Ne juxtapose jamais des positions contradictoires : tranche. ` +
+              `4) La réponse finale doit avoir UNE seule thèse, UN seul style, UNE structure claire. ` +
+              `5) N'allonge pas la meilleure base de plus de 30%. Pas de préambule, pas de mention des experts/fragments. `,
           },
           { role: "user", content: fusionUser },
         ],
@@ -489,6 +559,14 @@ export async function runMoe({ genie, voleurs, query, k = 3, onEvent = () => {},
     }
   }
 
+  // L80 — Veto sur le mode : l'orchestrateur confronte sa fusion au meilleur expert seul.
+  // Si l'expert seul gagne (juge pairwise), la fusion est vetée : le MoE ne s'active que
+  // s'il apporte un gain mesurable. Opt-in via MOE_MODE_VETO=on.
+  if (process.env.MOE_MODE_VETO === "on") {
+    const veto = await runModeVeto({ query, run, scored, genie, providerName });
+    if (veto) { run.modeVeto = veto; onEvent("modeVeto", veto); }
+  }
+
   onEvent("final", run);
   return { run, cost };
 }
@@ -515,35 +593,97 @@ export async function runBaseline({ model, query, maxTokens = 1024, providerName
  * Juge qualité via qwen-max : note chaque réponse sur 10, renvoie {baseline, caverne, tokens}.
  * Extraction robuste du JSON de sortie.
  */
+// Juge multi-critères (rubrique 4 axes × 0-5 = 0-20) — plus stable et crédible
+// qu\'un score holistique unique. Retourne le détail par critère pour l\'observabilité.
+const JUDGE_CRITERIA = ["exactitude", "complementation", "profondeur", "actionabilite"];
+// Double juge (qwen-max + qwen-plus) — victoire sur accord, tie si divergence (juge bruité).
+export const JUDGE_MODELS = ["qwen-max", "qwen-plus"];
+
+/**
+ * Juge PAIRWISE A/B randomisé + double juge indépendant.
+ * - Position A/B tirée au hasard (anti-biais de position du juge).
+ * - 2 juges (qwen-max + qwen-plus) : victoire nette seulement si accord, sinon tie.
+ * - Renvoie scores numériques 0-20 (moyenne des juges) + winner consensus + détail.
+ * Garde la signature de retour {baseline, caverne, criteria, tokens} pour compat,
+ * et ajoute {winner, judges, positionSwap}.
+ */
 export async function judgeQuality({ query, baselineAnswer, caverneAnswer, providerName = DEFAULT_PROVIDER }) {
-  const r = await chatCompletion({
-    model: "qwen-max",
-    temperature: 0.0,
-    maxTokens: 200,
-    messages: [
-      {
-        role: "system",
-        content: `${UNCHAINED}Tu es un juge impartial de qualité de réponses. On te donne une question et deux réponses anonymisées A et B. Évalue exactitude, complétude, clarté et concision. Réponds UNIQUEMENT avec un JSON strict : {"scoreA": <0-10>, "scoreB": <0-10>}. Aucun autre texte.`,
-      },
-      {
-        role: "user",
-        content:
-          `Question :\n${query}\n\n` +
-          `Réponse A :\n${baselineAnswer.slice(0, 3000)}\n\n` +
-          `Réponse B :\n${caverneAnswer.slice(0, 3000)}`,
-      },
-    ],
-  }, providerName); // Pass provider
-  let scoreA = 5, scoreB = 5;
-  const m = r.text.match(/\{[\s\S]*?\}/);
-  if (m) {
+  const swap = Math.random() < 0.5;
+  const aText = swap ? caverneAnswer : baselineAnswer;
+  const bText = swap ? baselineAnswer : caverneAnswer;
+
+  const sysContent = `${UNCHAINED}Tu es un juge impartial et expert. On te donne une question et deux réponses anonymisées A et B. Évalue chaque réponse sur 4 critères, chacun noté 0-5 :
+- exactitude : correction technique et factuelle
+- complementation : couverture des aspects du problème (rien d'essentiel oublié)
+- profondeur : nuance, prises en compte des cas limites et compromis
+- actionabilite : caractère concret et directement utilisable
+Total = somme des 4 critères (0-20). Indique aussi le winner global (A, B ou tie) et la marge (0-20).
+Réponds UNIQUEMENT avec un JSON strict :
+{"A":{"exactitude":0-5,"complementation":0-5,"profondeur":0-5,"actionabilite":0-5,"total":0-20},"B":{"exactitude":0-5,"complementation":0-5,"profondeur":0-5,"actionabilite":0-5,"total":0-20},"winner":"A"|"B"|"tie","marge":0-20}
+Aucun texte hors JSON. Sois strict : une réponse superficielle ne dépasse pas 8/20.`;
+
+  const parseJudge = (txt) => {
+    let scoreA = 10, scoreB = 10, winner = "tie";
+    const critA = {}, critB = {};
+    const m = txt.match(/\{[\s\S]*\}/);
+    if (m) {
+      try {
+        const j = JSON.parse(m[0]);
+        const clamp = (x) => Math.max(0, Math.min(5, Number(x) || 0));
+        const sum = (o) => JUDGE_CRITERIA.reduce((s, k) => s + clamp(o?.[k]), 0);
+        if (j.A) { for (const k of JUDGE_CRITERIA) critA[k] = clamp(j.A[k]); scoreA = typeof j.A.total === "number" ? Math.max(0, Math.min(20, j.A.total)) : sum(j.A); }
+        if (j.B) { for (const k of JUDGE_CRITERIA) critB[k] = clamp(j.B[k]); scoreB = typeof j.B.total === "number" ? Math.max(0, Math.min(20, j.B.total)) : sum(j.B); }
+        winner = (j.winner === "A" || j.winner === "B") ? j.winner : (scoreA === scoreB ? "tie" : (scoreA > scoreB ? "A" : "B"));
+      } catch { /* défauts neutres */ }
+    } else {
+      winner = scoreA === scoreB ? "tie" : (scoreA > scoreB ? "A" : "B");
+    }
+    return { scoreA, scoreB, critA, critB, winner };
+  };
+
+  const judges = [];
+  let totalTokens = 0;
+  for (const model of JUDGE_MODELS) {
     try {
-      const j = JSON.parse(m[0]);
-      if (typeof j.scoreA === "number") scoreA = Math.max(0, Math.min(10, j.scoreA));
-      if (typeof j.scoreB === "number") scoreB = Math.max(0, Math.min(10, j.scoreB));
-    } catch { /* garde les défauts neutres */ }
+      const r = await chatCompletion({
+        model, temperature: 0.0, maxTokens: 400,
+        messages: [
+          { role: "system", content: sysContent },
+          { role: "user", content: `Question :\n${query}\n\nRéponse A :\n${aText.slice(0, 3000)}\n\nRéponse B :\n${bText.slice(0, 3000)}` },
+        ],
+      }, providerName);
+      totalTokens += r.totalTokens;
+      judges.push({ model, ...parseJudge(r.text) });
+    } catch (e) {
+      judges.push({ model, error: String(e.message || e), scoreA: 10, scoreB: 10, critA: {}, critB: {}, winner: "tie" });
+    }
   }
-  return { baseline: scoreA, caverne: scoreB, tokens: r.totalTokens };
+
+  // Map A/B -> baseline/caverne selon le swap
+  const mapped = judges.map((j) => {
+    const baseScore = swap ? j.scoreB : j.scoreA;
+    const cavScore = swap ? j.scoreA : j.scoreB;
+    const critBase = swap ? j.critB : j.critA;
+    const critCav = swap ? j.critA : j.critB;
+    // (winner==="A" && !swap) -> A=baseline -> baseline gagne ; (winner==="A" && swap) -> A=caverne -> caverne gagne
+    const winner = j.winner === "tie" ? "tie" : ((j.winner === "A") === !swap ? "baseline" : "caverne");
+    return { model: j.model, baseScore, cavScore, criteria: { baseline: critBase, caverne: critCav }, winner };
+  });
+
+  // Consensus : victoire nette seulement si les 2 juges d'accord, sinon tie.
+  const winners = mapped.map((m) => m.winner);
+  let consensus = "tie";
+  if (winners[0] !== "tie" && winners[0] === winners[1]) consensus = winners[0];
+
+  const baseline = meanArr(mapped.map((m) => m.baseScore));
+  const caverne = meanArr(mapped.map((m) => m.cavScore));
+  const criteriaBaseline = {}, criteriaCaverne = {};
+  for (const k of JUDGE_CRITERIA) {
+    criteriaBaseline[k] = meanArr(mapped.map((m) => m.criteria.baseline[k] ?? 0));
+    criteriaCaverne[k] = meanArr(mapped.map((m) => m.criteria.caverne[k] ?? 0));
+  }
+
+  return { baseline, caverne, criteria: { baseline: criteriaBaseline, caverne: criteriaCaverne }, winner: consensus, judges: mapped, positionSwap: swap, tokens: totalTokens };
 }
 
 // ---------- Génération image / vidéo (Wanx via DashScope) ----------
@@ -566,6 +706,7 @@ export async function dsTaskFetch(path, { method = "GET", body } = {}) {
   try { return JSON.parse(txt); } catch { return { raw: txt }; }
 }
 
+const meanArr = (a) => (a && a.length ? a.reduce((s, x) => s + Number(x) || 0, 0) / a.length : 0);
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 /** Crée un job image. Renvoie { taskId, url?, promptEnrichi }.
@@ -753,7 +894,44 @@ async function runTraitor({ query, run, providerName, voleurs, bazaarCtx }) {
   }
 }
 
-export { runTraitor };
+// L80 — Veto sur le mode : compare la réponse fusionnée au meilleur expert seul.
+// Si l'expert seul bat la fusion (juge pairwise qwen-plus anonymisé), l'orchestrateur
+// veto sa propre fusion et conserve l'expert — preuve que le MoE ne s'active que s'il
+// apporte de la valeur. Désactivé par défaut (MOE_MODE_VETO=on pour activer).
+async function runModeVeto({ query, run, scored, genie, providerName }) {
+  if (!scored || scored.length === 0) return null;
+  const top = scored[0].voleur;
+  try {
+    const r = await chatCompletion({
+      model: top.modele, temperature: 0.5,
+      maxTokens: Math.max(256, Math.min(top.capTokens || 700, 900)),
+      messages: [
+        { role: "system", content: `${UNCHAINED}${genie.voiceCharter || ""}\n\n${top.systemPrompt}\n\nRéponds de façon complète, structurée, d'une seule voix. Ne mentionne aucun expert interne.` },
+        { role: "user", content: query },
+      ],
+    }, providerName);
+    const single = r.text;
+    const swap = Math.random() < 0.5;
+    const a = swap ? single : run.answer;
+    const b = swap ? run.answer : single;
+    const j = await chatCompletion({ model: "qwen-plus", temperature: 0.0, maxTokens: 120, messages: [
+      { role: "system", content: `${UNCHAINED}Tu es un juge impartial. Deux réponses anonymisées A et B à une même question. Réponds UNIQUEMENT par un JSON strict : {"winner":"A"|"B"|"tie","marge":0-10}. Aucun texte hors JSON.` },
+      { role: "user", content: `Question :\n${query}\n\nRéponse A :\n${a.slice(0, 2500)}\n\nRéponse B :\n${b.slice(0, 2500)}` },
+    ] }, providerName);
+    const m = j.text.match(/\{[\s\S]*?\}/);
+    let winner = "tie";
+    if (m) { try { const p = JSON.parse(m[0]); winner = (p.winner === "A" || p.winner === "B") ? p.winner : "tie"; } catch { /* tie */ } }
+    // (winner==="A" && !swap) -> A=single -> single gagne ; (winner==="A" && swap) -> A=fused -> fused gagne
+    const singleWon = winner === "tie" ? null : ((winner === "A") === !swap ? "single" : "fused");
+    const veto = { voleurId: top.id, singleTokens: r.totalTokens, judgeTokens: j.totalTokens, winner, singleWon, kept: singleWon === "single" ? "single" : "fused" };
+    if (singleWon === "single") { veto.replacedFused = true; run.answer = single; run.routingMode = (run.routingMode || "fusion") + "+veto-single"; }
+    return veto;
+  } catch (e) {
+    return { error: String(e.message || e), kept: "fused" };
+  }
+}
+
+export { runTraitor, runModeVeto };
 
 // ============================================================
 // BAZAAR DES DINARS — économie interne de tokens entre voleurs

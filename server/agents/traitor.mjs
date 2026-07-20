@@ -2,6 +2,8 @@
 // L49 — Agent Traitor : contradicteur permanent (40ᵉ Voleur)
 // ============================================================
 
+import { Agent } from "./base.mjs";
+
 export class TraitorAgent extends Agent {
   constructor() {
     super({ id: "traitor", name: "40ᵉ Voleur", role: "traitor", systemPrompt: "Tu es un contradicteur constructif. Cherche les failles et propose des corrections." });

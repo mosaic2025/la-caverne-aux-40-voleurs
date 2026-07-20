@@ -1,6 +1,6 @@
 # 🏛️ Architecture 80 couches — La Caverne aux 40 Voleurs
 
-> Objectif : transformer `la-caverne-aux-40-voleurs` en une plateforme multi-agents multicouche, avec persistance, humanité, KB, profilage, capacités abliterated/uncensored, tools, agents autonomes, vision, connaissance partagée à grande échelle (1B / 1T tokens de savoir collectif), génération multimodale (image/vidéo/TTS) et pont Fable 5 via OpenRouter.
+> Objectif : transformer `la-caverne-aux-40-voleurs` en une plateforme multi-agents multicouche, avec persistance, humanité, KB, profilage, capacités abliterated/uncensored, tools, agents autonomes, vision, connaissance partagée à grande échelle (1B / 1T tokens de savoir collectif), génération multimodale (image/vidéo/TTS) et pont Fable 5 (via Qwen Cloud).
 
 ---
 
@@ -18,7 +18,7 @@
 | 8 | **Vision** | L53-L58 | `server/vision/*.mjs`, `server/routes/etoile.mjs` |
 | 9 | **Connaissance partagée** | L59-L66 | `server/sharedMind/*.mjs` |
 | 10 | **Multimodal — Gen** | L67-L72 | `server/gen/*.mjs` |
-| 11 | **Fable 5 + OpenRouter** | L73-L78 | `server/fable5/*.mjs` |
+| 11 | **Fable 5 (pont Qwen Cloud)** | L73-L78 | `server/fable5/*.mjs` |
 | 12 | **Orchestration ultime** | L79-L80 | `server/orchestrator.mjs` |
 
 ---
@@ -117,7 +117,7 @@
 - **L63 Graphe de concepts** : entités et relations extraits.
 - **L64 Recherche fédérée** : recherche locale + distante.
 - **L65 Accès contrôlé** : permissions par niveau.
-- **L66 Connecteur Fable 5** : pont vers OpenRouter pour les modèles absents.
+- **L66 Connecteur Fable 5** : pont vers Qwen Cloud pour les modèles Fable 5.
 
 ### Pilier 10 — Multimodal — Gen (L67-L72)
 
@@ -128,14 +128,14 @@
 - **L71 Gen avatar** : personnage visuel pour La Lampe.
 - **L72 Pipeline multimodal** : image → vidéo → voix synchronisée.
 
-### Pilier 11 — Fable 5 + OpenRouter (L73-L78)
+### Pilier 11 — Fable 5 (pont Qwen Cloud) (L73-L78)
 
-- **L73 Provider OpenRouter** : `server/providers/openrouterProvider.js`.
-- **L74 Modèles Fable 5** : mapping des modèles via OpenRouter.
+- **L73 Provider Fable 5** : `server/fable5/fable5Client.mjs` (pont vers Qwen Cloud).
+- **L74 Modèles Fable 5** : `qwen-plus`, `qwen-max` (Qwen Cloud).
 - **L75 Fallback intelligent** : choix du meilleur modèle disponible.
 - **L76 Cost routing** : sélection par prix/latence/qualité.
 - **L77 Agrégation de réponses** : plusieurs modèles + vote/consensus.
-- **L78 Cache OpenRouter** : réutilisation des réponses identiques.
+- **L78 Cache Fable 5** : réutilisation des réponses identiques.
 
 ### Pilier 12 — Orchestration ultime (L79-L80)
 
@@ -148,7 +148,7 @@
 
 1. **Qwen-first** : Qwen Cloud / Alibaba Cloud sont les providers par défaut.
 2. **Ollama Cloud** : fallback optionnel pour les modèles non disponibles chez Qwen.
-3. **OpenRouter** : porte d'entrée vers Fable 5 et modèles exotiques.
+3. **Fable 5** : pont interne via Qwen Cloud (aucun provider externe).
 4. **Zéro dépendance lourde** : Node ESM natif, React + Vite, SVG/Canvas, pas Three.js.
 5. **Propriété WMF** : WMF reste propriétaire du code et des concepts.
 6. **Privacy-first** : connaissance partagée anonymisée, profils exportables.
@@ -211,7 +211,6 @@ server/
     avatarGen.mjs
     pipeline.mjs
   fable5/
-    openrouterProvider.mjs
     fable5Client.mjs
     fallback.mjs
     aggregator.mjs
@@ -232,7 +231,7 @@ Guards, tools, agents autonomes, abliterated/uncensored.
 Vision, génération multimodale, avatar.
 
 ### Phase 4 — Connecteur collectif (L59-L66, L73-L80)
-SharedMind, OpenRouter/Fable 5, orchestrateur ultime.
+SharedMind, Fable 5 (Qwen Cloud), orchestrateur ultime.
 
 ---
 

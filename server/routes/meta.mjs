@@ -132,7 +132,7 @@ export async function handle(req, res, url, parts, ctx) {
   if (req.method === "POST" && url.pathname === "/api/fable5") {
     const body = await readBody(req);
     const prompt = String(body?.prompt || "");
-    const model = String(body?.model || "anthropic/claude-fable-5");
+    const model = String(body?.model || "qwen-plus");
     if (!prompt) return sendError(res, 400, "prompt requis");
     try {
       if (isDemo()) return sendJson(res, 200, demoFable5(prompt)), true;

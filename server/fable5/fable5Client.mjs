@@ -1,17 +1,20 @@
-import { OpenRouterProvider } from "./openrouterProvider.mjs";
+// ============================================================
+// Fable5Client — pont "Fable 5" repointé sur Qwen Cloud (DashScope).
+// (L73-L78) — auparavant OpenRouter ; désormais Qwen-first, conformément
+// à la contrainte providers : seuls Qwen Cloud / AI Studio / Alibaba / Ollama Cloud.
+// ============================================================
+import { QwenCloudProvider } from "../providers/qwenCloudProvider.js";
 import { cacheGet, cacheSet } from "./cache.mjs";
 
-export const FABLE5_MODELS = [
-  "anthropic/claude-fable-5",
-  "anthropic/claude-5-fable-20260609",
-];
+// Modèles "Fable 5" = modèles Qwen Cloud utilisés comme pont exotique.
+export const FABLE5_MODELS = ["qwen-plus", "qwen-max"];
 
 const DEFAULT_FABLE5 = FABLE5_MODELS[0];
 
 export class Fable5Client {
   constructor(model = DEFAULT_FABLE5) {
-    this.provider = new OpenRouterProvider();
-    this.model = model;
+    this.provider = new QwenCloudProvider();
+    this.model = FABLE5_MODELS.includes(model) ? model : DEFAULT_FABLE5;
   }
 
   async ask(messages, { maxTokens = 2048, temperature = 0.6, useCache = true } = {}) {

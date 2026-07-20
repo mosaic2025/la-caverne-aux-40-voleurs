@@ -1,0 +1,42 @@
+{
+  "genieId": "gen_be5c74f8-7d5e-499e-b3ef-be0989b3a640",
+  "baseline": "qwen-turbo",
+  "repeats": 3,
+  "ts": 1784388432554,
+  "aggregate": {
+    "gMean": 0,
+    "gStd": 0,
+    "cMean": 0,
+    "cStd": 0,
+    "gainPct": 0,
+    "totWins": 0,
+    "totLosses": 0,
+    "totRounds": 0
+  },
+  "cases": [
+    {
+      "id": "login-secure",
+      "nom": "Endpoint login typé + sécurisé + tests",
+      "q": "Implémente en TypeScript un endpoint Express POST /login qui valide l'email, hache le mot de passe avec bcrypt (cost 12), émet un JWT signé (HS256, exp 1h), renvoie les erreurs normalisées, et liste 3 failles de sécurité à éviter dans cette implémentation. Ajoute 2 tests unitaires clés.",
+      "error": "500: {\"error\":\"Le Génie \\\"Champion de la Caverne\\\" n'a aucun Voleur actif avec embedding valide\"}"
+    },
+    {
+      "id": "microservices",
+      "nom": "Migration monolithe→microservices e-commerce",
+      "q": "Conçois la migration d'un monolithe e-commerce (catalogue, panier, commandes, paiement) vers des microservices : propose le découpage, le mode de communication (sync/async), la stratégie de cohérence des données, un déploiement zero-downtime, et 3 pièges concrets à éviter avec leur mitigation.",
+      "error": "500: {\"error\":\"Le Génie \\\"Champion de la Caverne\\\" n'a aucun Voleur actif avec embedding valide\"}"
+    },
+    {
+      "id": "refactor-pure",
+      "nom": "Refactor typé + pur + testable + gestion d'erreurs",
+      "q": "Refactorise cette fonction pour qu'elle soit typée strict, pure (sans effet de bord), testable, et gère explicitement les erreurs (panier vide, item sans prix, taxe négative) : function p(o){return o.items.map(i=>i.p*o.tax).reduce((a,b)=>a+b,0)}. Donne la signature, le code, et 3 cas de test.",
+      "error": "500: {\"error\":\"Le Génie \\\"Champion de la Caverne\\\" n'a aucun Voleur actif avec embedding valide\"}"
+    },
+    {
+      "id": "consistency",
+      "nom": "Eventual vs strong consistency pour un panier",
+      "q": "Analyse le compromis eventual consistency vs strong consistency pour un panier e-commerce multi-régions : quand choisir l'un ou l'autre selon le contexte, impact UX concret, et propose un hybride réaliste avec sa limite et son invariant de cohérence.",
+      "error": "500: {\"error\":\"Le Génie \\\"Champion de la Caverne\\\" n'a aucun Voleur actif avec embedding valide\"}"
+    }
+  ]
+}

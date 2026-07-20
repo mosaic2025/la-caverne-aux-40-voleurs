@@ -234,3 +234,28 @@ export const ROUTING_LABELS: Record<RoutingStrategy, string> = {
   cost: "Moins cher d'abord",
   perf: "Meilleur historique",
 };
+
+// ===== Le Camp — features jury (Embûche / Conciliabule / Sceaux) =====
+export interface CampRecrue {
+  nom: string; specialite: string; provider: string; modele: string;
+  effort: "low" | "med" | "high"; systemPrompt: string; capTokens: number; justification: string;
+}
+export interface CampAudit {
+  fragilities: { faille: string; gravite: number }[];
+  gangRival: { nom: string; specialite: string; cible: string; attaque: string }[];
+  verdict: { resilience: number; resume: string };
+  recrue: CampRecrue | null;
+  ts: number;
+}
+export interface CampForge {
+  escouade: CampRecrue[];
+  debat: { voleur: string; plaidoirie: string; remplace: string | null }[];
+  verdict: string;
+  ts: number;
+}
+export interface CampSigil {
+  svg: string;
+  maree: { hue: number; bpm: number; glyph: string; description: string };
+  seed: number;
+  ts: number;
+}

@@ -7,10 +7,7 @@ import { listTools } from "./tools/registry.mjs";
 import { scanInput, scanOutput } from "./guards/filters.mjs";
 import { auditPrompt } from "./guards/audit.mjs";
 
-const FABLE5_MODELS = [
-  "anthropic/claude-fable-5",
-  "anthropic/claude-5-fable-20260609",
-];
+const FABLE5_MODELS = ["qwen-plus", "qwen-max"];
 
 export class MetaOrchestrator {
   constructor(store) {
@@ -18,17 +15,17 @@ export class MetaOrchestrator {
     this.providers = new Map();
   }
 
-  getProvider(name) {
+  async getProvider(name) {
     if (!this.providers.has(name)) {
-      this.providers.set(name, getProvider(name));
+      this.providers.set(name, await getProvider(name));
     }
     return this.providers.get(name);
   }
 
   async route({ intent, complexity, sensitivity, budget }) {
-    // 1) Fable 5 / OpenRouter
+    // 1) Fable 5 (pont Qwen Cloud)
     if (sensitivity > 0.7 || FABLE5_MODELS.includes(intent.model)) {
-      return { provider: "openrouter", model: intent.model || FABLE5_MODELS[0] };
+      return { provider: "qwen-cloud", model: intent.model || FABLE5_MODELS[0] };
     }
     // 2) Multimodal
     if (["image", "video", "vision"].includes(intent.type)) {
@@ -57,7 +54,7 @@ export class MetaOrchestrator {
     const results = [];
     for (const step of plan.steps || []) {
       const route = await this.route(step);
-      const provider = this.getProvider(route.provider);
+      const provider = await this.getProvider(route.provider);
       // Guard entrant
       const lastUser = [...(step.messages || [])].reverse().find((m) => m.role === "user");
       if (lastUser) {

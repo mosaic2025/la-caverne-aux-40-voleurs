@@ -7,12 +7,12 @@ export const isDemo = () => process.env.DEMO_MODE === "on" || !process.env.DASHS
 
 export function demoFable5(prompt) {
   return {
-    text: `[DÉMO Fable 5] Voici une réponse simulée pour : "${prompt.slice(0, 80)}..."\n\nEn mode production avec OPENROUTER_API_KEY, cette réponse proviendrait du modèle anthropic/claude-fable-5.`,
+    text: `[DÉMO Fable 5] Voici une réponse simulée pour : "${prompt.slice(0, 80)}..."\n\nEn mode production avec DASHSCOPE_API_KEY, cette réponse proviendrait d'un modèle Qwen (Fable 5 bridge).`,
     promptTokens: Math.floor(prompt.length / 4),
     completionTokens: 64,
     totalTokens: Math.floor(prompt.length / 4) + 64,
     latencyMs: 120,
-    model: "anthropic/claude-fable-5 (demo)",
+    model: "qwen-plus (fable5 demo)",
   };
 }
 

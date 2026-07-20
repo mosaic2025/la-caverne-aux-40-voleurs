@@ -47,7 +47,7 @@ Le plan final (`docs/PLAN_LAMPE_QWEN_HACKATHON.md`) intègre les meilleures idé
 2. 🔄 Déléguer l'implémentation jour 1 (fondations + shazaam FX) à GLM 5.2.
 3. 🔄 Déléguer l'implémentation jour 2 (UX / incarnation visuelle) à Gemma 4 31b en support.
 4. 🔄 Tester end-to-end : `shazaam` → apparition de La Lampe → évolution Nour → voiceHint dynamique.
-5. ❓ Si `OPENROUTER_API_KEY` est fournie plus tard, ré-auditionner Fable 5 pour un rôle d'orchestrateur complémentaire.
+5. ❓ Si une clé provider additionnelle (Alibaba/Ollama Cloud) est fournie plus tard, ré-auditionner un orchestrateur complémentaire — OpenRouter exclu par contrainte provider.
 
 ---
 

@@ -1,0 +1,295 @@
+{
+  "genieId": "gen_42i6gjwd",
+  "api": "http://localhost:8787",
+  "ts": 1784385582417,
+  "results": [
+    {
+      "baselineModel": "qwen-turbo",
+      "baselineProvider": "qwen-cloud",
+      "rounds": [
+        {
+          "query": "Explique la différence entre concurrence et parallélisme, avec un exemple concret en Node.js.",
+          "baselineText": "La **concurrence** et le **parallélisme** sont deux concepts liés à la gestion des tâches dans un programme, mais ils ne sont pas identiques.\n\n### Définitions :\n\n- **Concurrence** : Cela signifie que plusieurs tâches sont exécutées **dans un même temps**, mais pas nécessairement en même temps. En pratique, cela implique de gérer plusieurs opérations en alternance, souvent via une boucle d'événements (comme dans Node.js), sans bloquer l'exécution principale.\n\n- **Parallélisme** : Cela signifie que plusieurs tâches sont exécutées **simultanément**, généralement sur plusieurs cœurs de processeur ou threads. Cela nécessite un support matériel ou logiciel pour exécuter plusieurs tâches en parallèle.\n\n---\n\n### Exemple concret en Node.js :\n\n#### 1. **Concurrence (sans parallélisme)**\n\nNode.js est basé sur un modèle **non bloquant et asynchrone**, qui permet la concurrence via une **boucle d'événements (event loop)**.\n\n```javascript\nconst fs = require('fs');\n\nconsole.log('Début du programme');\n\nfs.readFile('fichier1.txt', 'utf8', () => {\n  console.log('Fichier 1 lu');\n});\n\nfs.readFile('fichier2.txt', 'utf8', () => {\n  console.log('Fichier 2 lu');\n});\n\nconsole.log('Fin du programme');\n```\n\n**Résultat possible :**\n\n```\nDébut du programme\nFin du programme\nFichier 1 lu\nFichier 2 lu\n```\n\nIci, les lectures de fichiers sont **asynchrones**, donc **concurrentes** (elles s'exécutent en parallèle avec le reste du code), mais **pas parallèles** (elles ne sont pas exécutées sur plusieurs cœurs).\n\n---\n\n#### 2. **Parallélisme (avec `worker_threads`)**\n\nPour exécuter des tâches en parallèle, on peut utiliser le module `worker_threads`.\n\n```javascript\nconst { Worker } = require('worker_threads');\n\nfunction runTask(taskId) {\n  return new Promise((resolve) => {\n    const worker = new Worker(__filename, { workerData: taskId });\n    worker.on('message', resolve);\n  });\n}\n\nif (require.main === module) {\n  const taskId = process.workerData;\n  console.log(`Tâche ${taskId} en cours`);\n  // Simule un traitement long\n  setTimeout(() => {\n    console.log(`Tâche ${taskId} terminée`);\n    process.postMessage(`Tâche ${taskId} terminée`);\n  }, 1000);\n} else {\n  Promise.all([\n    runTask(1),\n    runTask(2),\n    runTask(3)\n  ]).then(() => {\n    console.log('Toutes les tâches terminées');\n  });\n}\n```\n\n**Résultat possible :**\n\n```\nTâche 1 en cours\nTâche 2 en cours\nTâche 3 en cours\nTâche 1 terminée\nTâche 2 terminée\nTâche 3 terminée\nToutes les tâches terminées\n```\n\nIci, chaque tâche est exécutée dans un **thread séparé**, donc **en parallèle**.\n\n---\n\n### Résumé :\n\n| Critère         | Concurrence                          | Parallélisme                         |\n|----------------|--------------------------------------|--------------------------------------|\n| Exécution      | Alternance (pas simultanée)          | Simultanée (sur plusieurs cœurs/threads) |\n| Utilisation    | Boucle d'événements (Node.js)        | Threads ou processus (worker_threads) |\n| Exemple        | `fs.readFile()`                      | `worker_threads`                     |",
+          "caverneText": "La différence entre **concurrence** et **parallélisme** n’est pas une question de *vitesse*, mais de *modèle d’exécution* :\n\n- **Concurrence**, c’est la capacité à *gérer plusieurs tâches indépendantes* de façon intercalée — sans blocage — sur une seule ressource (ex. : un seul thread d’exécution), grâce à un mécanisme comme la boucle d’événements. Les tâches ne s’exécutent pas nécessairement *en même temps*, mais elles *progressent ensemble*, en se partageant le temps processeur ou en attendant passivement des événements (I/O, timers, etc.).\n\n- **Parallélisme**, c’est l’exécution *réellement simultanée* de plusieurs tâches, sur des ressources physiques distinctes (ex. : plusieurs cœurs CPU, plusieurs processus ou threads natifs). Ici, le travail est *divisé et traité en parallèle*, pas seulement orchestré.\n\nEn Node.js, ce contraste est particulièrement clair :\n\n✅ **Exemple de concurrence** :  \n```javascript\nconst axios = require('axios');\n\nasync function fetchConcurrently() {\n  const [user, posts] = await Promise.all([\n    axios.get('https://jsonplaceholder.typicode.com/users/1'),\n    axios.get('https://jsonplaceholder.typicode.com/posts/1')\n  ]);\n  return { user: user.data.name, post: posts.data.title };\n}\n```\nLes deux requêtes sont lancées *simultanément du point de vue logique*, mais exécutées *concurrentement* : Node.js les décharge vers le système via libuv, puis reprend le contrôle dès que l’une ou l’autre répond — tout cela sur le *même thread principal*, sans bloquer. Aucun cœur supplémentaire n’est mobilisé ; il y a juste une gestion intelligente de l’attente.\n\n✅ **Exemple de parallélisme** :  \n```javascript\nconst { fork } = require('child_process');\n\n// Démarrage de deux processus enfants indépendants\nconst worker1 = fork('./cpu-intensive-task.js', ['task1']);\nconst worker2 = fork('./cpu-intensive-task.js', ['task2']);\n\nworker1.on('message', console.log);\nworker2.on('message', console.log);\n```\nIci, chaque `fork()` crée un *processus séparé*, avec sa propre instance de V8, son propre thread principal, et potentiellement son propre cœur physique. Si la machine a plusieurs cœurs, ces deux tâches peuvent s’exécuter *vraiment en même temps* — c’est du parallélisme matériel.\n\nEn résumé :  \n→ La concurrence permet de *faire plus avec moins* (un thread gère mille connexions).  \n→ Le parallélisme permet de *faire plus plus vite* (plusieurs threads traitent des calculs lourds en parallèle).  \nNode.js est concurrent *par nature*, mais parallèle *uniquement quand on le force* — via `worker_threads`, `child_process`, ou `cluster`.",
+          "baseLatency": 9272,
+          "cavLatency": 21430,
+          "baseTokens": 976,
+          "cavTokens": 2859,
+          "baseScore": 9,
+          "cavScore": 8,
+          "winner": "baseline"
+        },
+        {
+          "query": "Comment éviter les goulots d'étranglement I/O sur une API Express recevant 10k req/s ?",
+          "baselineText": "Pour éviter les goulots d'étranglement I/O sur une API Express recevant 10k requêtes par seconde, il faut optimiser à la fois le code, l'infrastructure et l'architecture. Voici les principales stratégies :\n\n### 1. **Utiliser un serveur HTTP asynchrone**\n- **Express** est basé sur Node.js, qui est nativement asynchrone.\n- Assurez-vous que toutes les opérations I/O (ex : base de données, fichiers, appels externes) sont effectuées de manière asynchrone avec `async/await` ou des promesses.\n\n### 2. **Optimiser les routes et les middlewares**\n- Évitez les middlewares lourds ou non nécessaires.\n- Utilisez des middlewares comme `express-rate-limit` pour limiter les requêtes si nécessaire.\n- Privilégiez les routes statiques et utilisez `express.static` pour les fichiers statiques.\n\n### 3. **Mettre en cache**\n- Utilisez un cache comme **Redis** pour stocker les réponses fréquemment demandées.\n- Utilisez des headers HTTP (`Cache-Control`, `ETag`, `Last-Modified`) pour permettre le cache côté client ou proxy.\n\n### 4. **Utiliser un load balancer**\n- Déployez un **load balancer** (comme Nginx ou HAProxy) pour distribuer le trafic entre plusieurs instances de votre API.\n- Cela répartit la charge et améliore la résilience.\n\n### 5. **Échelonner horizontalement**\n- Déployez plusieurs instances de votre API sur différents processus ou machines.\n- Utilisez un **cluster** Node.js pour exploiter tous les cœurs du processeur.\n\n### 6. **Optimiser les bases de données**\n- Utilisez des connexions persistantes avec un pool de connexions (ex : `pg-pool` pour PostgreSQL).\n- Optimisez les requêtes SQL et utilisez des index.\n- Considérez un système de cache de base de données (ex : Redis).\n\n### 7. **Réduire la latence réseau**\n- Minifiez les données envoyées (JSON, images, etc.).\n- Utilisez **Gzip** ou **Brotli** pour compresser les réponses.\n- Évitez les appels externes coûteux ou ajoutez un timeout.\n\n### 8. **Surveiller et profiler**\n- Utilisez des outils comme **New Relic**, **Datadog**, ou **Prometheus** pour surveiller les performances.\n- Profiler le code avec **Node.js built-in profiler** ou **Chrome DevTools** pour identifier les points de blocage.\n\n### 9. **Utiliser des workers asynchrones**\n- Pour les tâches longues ou lourdes (ex : traitement d'images, envoi d'email), déportez-les vers des workers (ex : RabbitMQ, Kafka, Bull).\n\n### 10. **Configurer correctement Node.js**\n- Augmentez la limite de fichier (ulimit) si nécessaire.\n- Activez le mode cluster avec `cluster` ou `pm2` pour exploiter plusieurs cœurs.\n- Configurez `http.maxHeaderSize` et `headersTimeout` selon vos besoins.\n\n---\n\nEn combinant ces approches, vous pouvez gérer efficacement 10k req/s sans goulots d’étranglement I/O.",
+          "caverneText": "Pour éviter les goulots d'étranglement I/O sur une API Express recevant 10k req/s, voici une approche unifiée et cohérente :\n\n### 1. Offload systématique des I/O lourds\n- **Enfile toutes les opérations I/O lourdes (plus de 10 ms)**, comme les uploads, la génération de PDF, l'envoi d'emails, ou le traitement d'images, dans une **queue dédiée** (par exemple, Redis Streams, BullMQ, ou Kafka).\n- Utilise des **workers isolés** (hors du processus Express) pour consommer ces tâches en arrière-plan, libérant ainsi immédiatement la requête HTTP.\n\n### 2. Mise en place d'un cache applicatif et infrastructure\n- **Cache applicatif** : Utilise `node-cache` ou `lru-cache` pour cacher les données locales, comme les configurations ou les catalogues statiques.\n- **Cache partagé** : Utilise Redis pour cacher les réponses partagées, par exemple, les résultats de requêtes `GET /users/:id` avec un TTL (Time To Live) dynamique.\n\n### 3. Optimisation du cache NGINX\n- **Active `proxy_cache`** pour les endpoints statiques ou peu changeants :\n  ```nginx\n  proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=my_cache:10m inactive=60m;\n  proxy_cache_key \"$scheme$request_method$host$request_uri\";\n  ```\n- **Configure `proxy_cache_valid`** pour définir la durée de validité selon le code de statut :\n  ```nginx\n  proxy_cache_valid 200 302 10m;\n  proxy_cache_valid 404 1m;\n  ```\n- **Active `proxy_buffering on;`** pour bufferiser les réponses avant de les envoyer au client, ce qui permet à Node.js de libérer la connexion plus rapidement.\n\n### 4. Utilisation d'un CDN\n- Implémente un **CDN (Content Delivery Network)**, comme Cloudflare ou Akamai, pour distribuer le contenu statique et les réponses HTTP fréquemment consultées. Cela réduit la latence et la charge sur votre serveur principal.\n\n### 5. Compression des réponses\n- Active la compression gzip ou brotli dans NGINX avec `gzip on;` ou `brotli on;` pour réduire la taille des réponses et accélérer leur transmission.\n\n### 6. Validation côté client\n- Utilise les en-têtes `ETag` et `Cache-Control` pour permettre aux clients de mettre en cache les réponses, réduisant ainsi le nombre de requêtes redondantes.\n\n### 7. Détection et limitation des bots\n- Configure NGINX avec des modules comme `ngx_http_limit_req_module` pour limiter le taux de requêtes des IP suspectes ou des bots malveillants, ce qui aide à prévenir les attaques DDoS et à maintenir la performance de votre API.\n\nEn combinant ces stratégies, vous pouvez efficacement gérer une charge élevée de requêtes tout en minimisant les goulots d'étranglement I/O.",
+          "baseLatency": 7405,
+          "cavLatency": 58211,
+          "baseTokens": 898,
+          "cavTokens": 3220,
+          "baseScore": 9,
+          "cavScore": 8,
+          "winner": "baseline"
+        }
+      ],
+      "metrics": [
+        {
+          "label": "qualité",
+          "baseline": 9,
+          "caverne": 8,
+          "gainPct": -11.11
+        },
+        {
+          "label": "latence p95",
+          "baseline": 9272,
+          "caverne": 58211,
+          "gainPct": -527.81
+        },
+        {
+          "label": "latence moyenne",
+          "baseline": 8338.5,
+          "caverne": 39820.5,
+          "gainPct": -377.55
+        },
+        {
+          "label": "coût/1k",
+          "baseline": 0.0003,
+          "caverne": 0.001473,
+          "gainPct": -391.05
+        },
+        {
+          "label": "tokens",
+          "baseline": 1874,
+          "caverne": 6079,
+          "gainPct": -224.39
+        },
+        {
+          "label": "tokens/moyenne",
+          "baseline": 937,
+          "caverne": 3039.5,
+          "gainPct": -224.39
+        }
+      ],
+      "ts": 1784385682109,
+      "useCase": "concurrency",
+      "useCaseNom": "Concurrence & performance Node",
+      "wallMs": 98860
+    },
+    {
+      "baselineModel": "qwen-turbo",
+      "baselineProvider": "qwen-cloud",
+      "rounds": [
+        {
+          "query": "Quels sont les compromis entre une base SQL et une base documentaire pour un carnet de commandes e-commerce ?",
+          "baselineText": "Les compromis entre une base SQL et une base documentaire pour un carnet de commandes e-commerce dépendent des besoins spécifiques du système, comme la structure des données, les performances, l'évolutivité, la complexité des requêtes et la nécessité de relations entre les entités.\n\n### Compromis clés :\n\n#### 1. **Structure des données**\n- **SQL** : Structure rigide avec schéma défini (tables, colonnes, types). Idéal pour des données bien structurées.\n- **Documentaire** : Structure flexible, permettant des documents hétérogènes. Utile pour des commandes avec des informations variables (ex : commandes personnalisées).\n\n**Compromis** : Si les commandes ont des champs variables ou évoluent souvent, une base documentaire est plus adaptée. Sinon, SQL offre une meilleure cohérence et validation.\n\n---\n\n#### 2. **Requêtes complexes**\n- **SQL** : Supporte des jointures, agrégations, filtres avancés. Idéal pour des rapports, analyses, etc.\n- **Documentaire** : Généralement limité dans les opérations de jointure et d'agrégation, sauf si le moteur le supporte (comme MongoDB avec aggregation pipeline).\n\n**Compromis** : Si le système a besoin de requêtes complexes (ex : statistiques de ventes par produit, client, région), SQL est plus performant. Pour des accès simples et rapides, la base documentaire peut être plus efficace.\n\n---\n\n#### 3. **Performance et scalabilité**\n- **SQL** : Bonne performance pour des opérations transactionnelles (CRUD), mais peut avoir des problèmes de scalabilité horizontale.\n- **Documentaire** : Évolutivité horizontale facilitée, idéale pour des systèmes à haut volume de données.\n\n**Compromis** : Si le système doit gérer un grand nombre de commandes simultanément, une base documentaire peut offrir meilleure scalabilité. Cependant, pour des transactions ACID, SQL reste plus fiable.\n\n---\n\n#### 4. **Gestion des relations**\n- **SQL** : Gère facilement les relations entre tables (clients, commandes, produits).\n- **Documentaire** : Relations sont gérées via références ou embeddings, ce qui peut compliquer les requêtes.\n\n**Compromis** : Si les données sont fortement liées (ex : commande avec plusieurs articles, clients, livraisons), SQL est plus adapté. Pour des données plus autonomes, la base documentaire est plus simple.\n\n---\n\n#### 5. **Mise à jour et concurrence**\n- **SQL** : Gère les transactions ACID, garantissant la cohérence des données en cas de conflits.\n- **Documentaire** : Dépend du moteur, mais généralement moins strict sur la cohérence (ex : eventual consistency).\n\n**Compromis** : Pour des systèmes critiques (ex : gestion de stock, paiements), SQL est plus sûr. Pour des systèmes moins critiques, une base documentaire peut être acceptable.\n\n---\n\n### Conclusion :\n- **Choix SQL** : Si vous avez besoin de cohérence, de relations complexes, de requêtes avancées et de transactions fiables.\n- **Choix documentaire** : Si vous avez besoin de flexibilité, de scalabilité, et que les données sont plus hétérogènes ou évolutives.\n\nUn choix hybride (ex : utiliser SQL pour les données transactionnelles et une base documentaire pour les données non structurées) peut aussi être envisagé selon les besoins.",
+          "caverneText": "Pour un carnet de commandes e-commerce, le choix entre une base SQL et une base documentaire implique des compromis structurels, opérationnels et architecturaux profonds — pas seulement techniques, mais stratégiques.\n\n**Intégrité et cohérence transactionnelle** est le premier clivage : SQL garantit nativement ACID — ce qui permet d’atomiser des opérations critiques comme *débiter le stock* **et** *créer la commande* dans une seule transaction. En cas de panne ou de conflit, tout échoue ou tout réussit. Une base documentaire, en revanche, ne supporte généralement pas de transactions multi-document avec isolation forte : pour obtenir une cohérence équivalente, il faut recourir à des patterns externes (sagas, compensations, deux phases commit), ce qui augmente la complexité, introduit des états intermédiaires (*partial failure*), et expose à des risques concrets comme le *stale inventory* (stock affiché disponible alors qu’il vient d’être réservé ailleurs).\n\n**Schéma : rigueur vs agilité** — SQL impose un schéma strict, vérifié statiquement. Ajouter un champ comme `express_shipping_fee` exige une migration contrôlée, souvent avec verrouillage ou downtime partiel. Mais cette rigidité protège contre les erreurs silencieuses : on sait *à coup sûr* que chaque commande contient un `status`, typé `ENUM`, non nul. En mode documentaire, on peut injecter ce champ immédiatement, sans déploiement ni interruption — mais aussi insérer des documents manquants, mal typés (`\"express_shipping_fee\": \"free\"` au lieu d’un nombre), ou incohérents entre versions — sans alerte, jusqu’à ce qu’une application tente de lire ou calculer dessus.\n\n**Jointures et modélisation des relations** révèlent une divergence fondamentale : dans un carnet de commandes, on consulte fréquemment des vues agrégées — *commande + client + adresse de livraison + lignes + produits + historique de statut*. SQL gère cela naturellement via des jointures optimisées, avec index, plans d’exécution prédictibles, et mise à jour atomique des références. En documentaire, on dénormalise massivement : on embbed `customer.name`, `product.sku`, `address.line1`, etc., directement dans le document `order`. Cela accélère la lecture — une seule requête pour récupérer toute la fiche — mais rend l’écriture fragile (mise à jour redondante sur plusieurs documents), complique les rapports analytiques (ex. : « combien de commandes par région ? » nécessite un *map-reduce* ou un pipeline ETL), et rend impossible la cohérence référentielle sans logique applicative supplémentaire.\n\n**Scalabilité et performance** suivent des trajectoires opposées :  \n- Une base documentaire s’échelle horizontalement avec simplicité — idéal pour absorber des pics de soumissions de commandes (Black Friday) sur des clusters distribués. Son modèle orienté écriture favorise les inserts massifs, surtout si les données sont auto-contenues.  \n- SQL s’échelle principalement en verticalité ou via du sharding complexe — mais lorsqu’il s’agit de requêtes complexes (ex. : « liste des commandes annulées depuis 7 jours avec motif + produit retourné + taux de remboursement »), son moteur de requête reste imbattable en précision, maintenabilité et latence prédictible.\n\nEnfin, **consistance vs disponibilité** n’est pas théorique : dans un système e-commerce, une commande *perdue* ou *dupliquée* est une perte financière directe ; une interface qui *refuse temporairement* une commande pendant 200 ms est rarement critique. SQL privilégie la consistance forte — acceptable ici. Une base documentaire, même moderne (avec transactions multi-document), sacrifie souvent la *strict serializability* pour la latence ou la tolérance aux pannes — un compromis justifié dans certains contextes, mais dangereux là où la fiabilité comptable prime.\n\nEn synthèse :  \n→ Choisissez **SQL** si votre priorité est la fidélité transactionnelle, la traçabilité comptable, la richesse des rapports opérationnels, et la maintenance à long terme par des équipes variées (devs, analysts,",
+          "baseLatency": 8042,
+          "cavLatency": 29995,
+          "baseTokens": 920,
+          "cavTokens": 3395,
+          "baseScore": 8,
+          "cavScore": 9,
+          "winner": "caverne"
+        },
+        {
+          "query": "Rédige un plan en 5 points pour migrer une API monolithique vers des services indépendants sans interruption.",
+          "baselineText": "1. **Analyse et découpage fonctionnel** : Identifier les composants logiques de l'API monolithique et les regrouper en services métier cohérents, en tenant compte des dépendances et des interactions entre eux.\n\n2. **Migration progressive par couche** : Développer et déployer chaque service indépendant de manière incrémentale, en assurant la compatibilité avec l'API existante via des interfaces API ou des adaptateurs.\n\n3. **Gestion des données et migrations** : Mettre en place un mécanisme de synchronisation et de migration des données entre le système centralisé et les nouveaux services, en veillant à la cohérence et à la sécurité.\n\n4. **Tests et validation continue** : Effectuer des tests d'intégration et de charge à chaque étape pour s'assurer que les services fonctionnent correctement et que l'ensemble reste stable.\n\n5. **Transition vers une architecture microservices** : Désactiver progressivement les parties de l'API monolithique non plus utilisées, tout en maintenant une interface de basculement en cas de besoin.",
+          "caverneText": "Voici un plan en **5 points concrets, opérationnels et sans interruption** pour migrer une API monolithique vers une architecture de services indépendants :\n\n1. **Découplage progressif fondé sur les limites de domaine**  \n   Analyser le trafic réel, les cycles de déploiement, les dépendances internes et les modèles métier pour identifier les *bounded contexts* naturels (ex. gestion des utilisateurs, facturation, notifications). Commencer par extraire les services à faible couplage fonctionnel *et* opérationnel — ceux qui peuvent évoluer, se déployer et échouer indépendamment — tout en préservant la compatibilité ascendante via des adaptateurs API qui masquent les changements sous-jacents.\n\n2. **API Gateway comme couche de routage dynamique et sans rupture**  \n   Déployer une gateway centralisée (Kong, Apigee ou Envoy) pour intercepter toutes les requêtes entrantes. Configurer des règles de routage intelligentes (basées sur des headers, des feature flags, des versions d’API ou des pourcentages de trafic) afin de diriger les appels soit vers le monolithe, soit vers les nouveaux services — y compris des tests canary, des basculements progressifs et des retours arrière immédiats sans modification côté client.\n\n3. **Communication asynchrone et synchronisation éventuelle des données**  \n   Éviter tout partage direct de base de données entre services. Pour les données partagées, utiliser un *change data capture* (CDC) ou un message broker (Kafka, RabbitMQ) afin de propager les événements métier de façon fiable. Implémenter l’idempotence, les transactions compensatoires et des mécanismes de reconciliation pour gérer les incohérences temporelles — sans jamais sacrifier la cohérence métier ni la résilience.\n\n4. **Déploiement continu avec validation parallèle et observabilité unifiée**  \n   Mettre en place un pipeline CI/CD automatisé pour chaque service, incluant des tests unitaires, d’intégration et de contrat (consumer-driven contracts). Exécuter systématiquement les nouveaux services *en parallèle* du monolithe sur le même flux de production, avec une instrumentation complète (tracing distribué, logs structurés, métriques unifiées) dès le premier déploiement — pour détecter les écarts de comportement, de performance ou de fiabilité *avant* tout basculement.\n\n5. **Migration incrémentale du trafic avec garantie de continuité**  \n   Basculer le trafic progressivement : d’abord en lecture seule sur les services migrés, puis en écriture contrôlée avec double-écriture temporaire (monolithe + nouveau service), puis enfin en mode exclusif — toujours accompagné d’un *fallback automatique* vers le monolithe en cas d’erreur détectée. Maintenir le support complet de l’API monolithique jusqu’à ce que 100 % du trafic soit stable sur les services, puis déprécier progressivement le monolithe avec une stratégie de versionnage explicite et des communications claires aux consommateurs.",
+          "baseLatency": 2662,
+          "cavLatency": 21510,
+          "baseTokens": 379,
+          "cavTokens": 2607,
+          "baseScore": 8,
+          "cavScore": 10,
+          "winner": "caverne"
+        }
+      ],
+      "metrics": [
+        {
+          "label": "qualité",
+          "baseline": 8,
+          "caverne": 9.5,
+          "gainPct": 18.75
+        },
+        {
+          "label": "latence p95",
+          "baseline": 8042,
+          "caverne": 29995,
+          "gainPct": -272.98
+        },
+        {
+          "label": "latence moyenne",
+          "baseline": 5352,
+          "caverne": 25752.5,
+          "gainPct": -381.18
+        },
+        {
+          "label": "coût/1k",
+          "baseline": 0.0003,
+          "caverne": 0.00144,
+          "gainPct": -379.93
+        },
+        {
+          "label": "tokens",
+          "baseline": 1299,
+          "caverne": 6002,
+          "gainPct": -362.05
+        },
+        {
+          "label": "tokens/moyenne",
+          "baseline": 649.5,
+          "caverne": 3001,
+          "gainPct": -362.05
+        }
+      ],
+      "ts": 1784385746414,
+      "useCase": "archi",
+      "useCaseNom": "Architecture & migration microservices",
+      "wallMs": 64301
+    },
+    {
+      "baselineModel": "qwen-coder-plus",
+      "baselineProvider": "qwen-cloud",
+      "rounds": [
+        {
+          "query": "Écris une fonction TypeScript générique qui déduplique un tableau par une clé extraite, avec types stricts.",
+          "baselineText": "```typescript\nfunction deduplicateByKey<T>(array: T[], keyExtractor: (item: T) => string | number): T[] {\n    const seenKeys = new Set<string | number>();\n    return array.filter(item => {\n        const key = keyExtractor(item);\n        if (seenKeys.has(key)) {\n            return false;\n        } else {\n            seenKeys.add(key);\n            return true;\n        }\n    });\n}\n\n// Exemple d'utilisation :\ninterface Person {\n    id: number;\n    name: string;\n}\n\nconst people: Person[] = [\n    { id: 1, name: 'Alice' },\n    { id: 2, name: 'Bob' },\n    { id: 1, name: 'Alice' }\n];\n\nconst uniquePeople = deduplicateByKey(people, person => person.id);\nconsole.log(uniquePeople); // [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }]\n```\n\nCette fonction `deduplicateByKey` prend un tableau générique et une fonction de sélection de clé. Elle utilise un `Set` pour suivre les clés déjà rencontrées et filtre le tableau pour ne garder que les premières occurrences de chaque clé.",
+          "caverneText": "```ts\nfunction deduplicateBy<T>(array: T[], keyExtractor: (item: T) => string | number): T[] {\n  const seen = new Set<string | number>();\n  return array.filter(item => {\n    const key = keyExtractor(item);\n    // Rejette explicitement `null` et `undefined` pour éviter la fusion silencieuse d’éléments sans clé valide\n    if (key == null) return false;\n    if (seen.has(key)) return false;\n    seen.add(key);\n    return true;\n  });\n}\n```\n\nCette implémentation garantit :\n- Une **sécurité stricte** contre les clés `null`/`undefined`, évitant toute déduplication non intentionnelle d’éléments « orphelins » (ex. accès à une propriété manquante ou `undefined` dans un `?.` chain).\n- Une **cohérence de type** : `string | number` est le sous-ensemble minimal et pratique de `PropertyKey` utilisé réellement comme clé de déduplication — exclut `symbol` (inutile ici) et `bigint` (non supporté nativement par `Set` avant ES2023, et rarement pertinent pour l’identité logique).\n- Une **pureté implicite attendue** : bien que TypeScript ne puisse pas forcer la pureté, la signature exige une fonction *déterministe* (pas d’effets de bord), car tout comportement non reproductible rendrait la déduplication non fiable — c’est une attente contractuelle documentée par le type.\n\nUtilisation typique :\n```ts\nconst users = [{ id: 1, name: \"Alice\" }, { id: 2, name: \"Bob\" }, { id: 1, name: \"Alice (dup)\" }];\nconst uniqueUsers = deduplicateBy(users, u => u.id); // → 2 éléments\n```",
+          "baseLatency": 5805,
+          "cavLatency": 17374,
+          "baseTokens": 386,
+          "cavTokens": 2238,
+          "baseScore": 8,
+          "cavScore": 9,
+          "winner": "caverne"
+        },
+        {
+          "query": "Refactorise ce snipset pour éliminer les any : function map(a){return a.map(x=>x.id)}",
+          "baselineText": "function map<T extends { id: any }>(a: T[]): T['id'][] {\n  return a.map(x => x.id);\n}",
+          "caverneText": "function map<T extends { id: unknown }>(a: T[]): T['id'][] {\n  return a.map(x => x.id);\n}",
+          "baseLatency": 1438,
+          "cavLatency": 11810,
+          "baseTokens": 159,
+          "cavTokens": 1421,
+          "baseScore": 8,
+          "cavScore": 9,
+          "winner": "caverne"
+        }
+      ],
+      "metrics": [
+        {
+          "label": "qualité",
+          "baseline": 8,
+          "caverne": 9,
+          "gainPct": 12.5
+        },
+        {
+          "label": "latence p95",
+          "baseline": 5805,
+          "caverne": 17374,
+          "gainPct": -199.29
+        },
+        {
+          "label": "latence moyenne",
+          "baseline": 3621.5,
+          "caverne": 14592,
+          "gainPct": -302.93
+        },
+        {
+          "label": "coût/1k",
+          "baseline": 0.0035,
+          "caverne": 0.001297,
+          "gainPct": 62.95
+        },
+        {
+          "label": "tokens",
+          "baseline": 545,
+          "caverne": 3659,
+          "gainPct": -571.38
+        },
+        {
+          "label": "tokens/moyenne",
+          "baseline": 272.5,
+          "caverne": 1829.5,
+          "gainPct": -571.38
+        }
+      ],
+      "ts": 1784385784915,
+      "useCase": "code",
+      "useCaseNom": "Code & typage TypeScript",
+      "wallMs": 38501
+    },
+    {
+      "baselineModel": "qwen-plus",
+      "baselineProvider": "qwen-cloud",
+      "rounds": [
+        {
+          "query": "Quelles métriques suivre pour évaluer la qualité d'un orchestrateur multi-agents LLM ?",
+          "baselineText": "Pour évaluer la qualité d’un **orchestrateur multi-agents LLM**, il faut mesurer à la fois sa **capacité fonctionnelle**, sa **robustesse opérationnelle**, son **efficacité cognitive** et son **adaptabilité contextuelle**. Voici les métriques clés, organisées par catégorie, avec leur définition opérationnelle et leur mode de collecte :\n\n---\n\n### 🔹 1. **Performance Cognitive & Coordination**\n- **Task Completion Rate (TCR)**  \n  *% de tâches complexes (ex. : recherche + synthèse + rédaction + validation) menées à terme sans intervention humaine.*  \n  → Mesuré sur un jeu de benchmarks standardisés (ex. : MultiAgentBench, AgentInstruct).\n\n- **Agent Handoff Accuracy (AHA)**  \n  *Précision des décisions de transfert de contrôle entre agents (ex. : « passer à l’agent vérificateur »).*  \n  → Évalué via annotation manuelle ou modèle de référence sur les logs d’orchestration.\n\n- **Reasoning Trace Fidelity (RTF)**  \n  *Concordance entre le raisonnement déclaré (dans les `thought`/`plan` des agents) et les actions effectivement exécutées.*  \n  → Scored via LLM-as-judge (prompting structuré) ou embedding similarity (cosine entre plan et action).\n\n---\n\n### 🔹 2. **Robustesse & Fiabilité**\n- **Failure Containment Ratio (FCR)**  \n  *% des erreurs locales (ex. : appel API échoué, hallucination d’un agent) qui ne provoquent pas de cascade de défaillance globale.*  \n  → Log-based, comptabilisé sur 1000+ exécutions simulées avec injections de fautes.\n\n- **State Consistency Index (SCI)**  \n  *Stabilité de la mémoire partagée / du contexte global face aux mises à jour concurrentes (ex. : deux agents modifient le même champ).*  \n  → Mesuré via checksums temporels ou détection de conflits dans le state log.\n\n- **Recovery Time to Baseline (RTB)**  \n  *Temps médian (en secondes) pour revenir à un état fonctionnel après une interruption (kill, timeout, OOM).*  \n  → Chronométré en environnement sandboxé avec redémarrage forcé.\n\n---\n\n### 🔹 3. **Efficacité Système**\n- **Orchestration Overhead (OO)**  \n  *Latence ajoutée par l’orchestrateur seul (hors LLM inference), exprimée en ms par tour de boucle (loop).*  \n  → Profilé avec `perf`, `py-spy`, ou observabilité intégrée (OpenTelemetry).\n\n- **Token Efficiency Ratio (TER)**  \n  *Ratio entre tokens utiles générés (ex. : réponse finale) et tokens totaux consommés (incl. prompts inter-agents, méta-instructions, résumés).*  \n  → Calculé à partir des logs d’appels LLM (via `tiktoken` ou `transformers.tokenizer`).\n\n- **Agent Utilization Entropy (AUE)**  \n  *Mesure de diversité d’utilisation des agents (entropie de la distribution des appels par agent). Évite la sur-utilisation d’un seul agent ou le \"ghosting\" d’agents inutiles.*  \n  → Calculé sur les logs d’appel sur un batch de tâches.\n\n---\n\n### 🔹 4. **Adaptabilité & Apprentissage**\n- **Dynamic Role Assignment Accuracy (DRAA)**  \n  *Capacité à assigner le bon agent au bon rôle selon le contexte (ex. : détecter qu’une question juridique nécessite un agent spécialisé, pas un généraliste).*  \n  → Évalué sur jeux de test avec variations de domaine, mesuré par F1-score sur les rôles prédits vs. optimaux.\n\n- **Feedback Integration Latency (FIL)**  \n  *Délai moyen (en tours) pour qu’une correction humaine ou un signal externe (ex. : `user: « corrige la source X »`) soit intégrée dans le flux d’orchestration.*  \n  → Tracé via timestamps dans les logs d’interaction.\n\n---\n\n### 🔹 5. **Sécurité & Contrôle**\n- **Policy Compliance Score (PCS)**  \n  *% des décisions d’orchestration respectant des contraintes explicites (ex. : « aucun agent ne peut accéder à la base",
+          "caverneText": "Pour évaluer la qualité d'un orchestrateur multi-agents LLM, vous pouvez suivre les métriques suivantes :\n\n### **1. Flexibilité fonctionnelle**\n- **Temps de réconfiguration** : temps nécessaire pour intégrer un nouvel agent ou modifier les rôles existants, y compris la mise à jour des protocoles de communication et des stratégies de coordination. Cette métrique évalue la facilité avec laquelle l'orchestrateur peut s'adapter à de nouvelles exigences ou à des modifications de l'équipe d'agents.\n- **Capacité à modifier le workflow** : capacité à modifier le workflow sans redéploiement complet, via configuration dynamique, modèles paramétrés, ou interfaces de personnalisation.\n\n### **2. Éthique & conformité**\n- **Taux de violations éthiques détectées** : % de tâches générant des outputs non conformes aux principes éthiques prédéfinis (ex. : biais, discrimination, violation de confidentialité).\n- **Conformité réglementaire** : respect des normes légales et réglementaires applicables, notamment en matière de protection des données et de transparence.\n- **Équité et non-discrimination** : absence de biais systématiques dans les décisions prises par l'orchestrateur, garantissant un traitement équitable de toutes les entités.\n- **Capacité de filtrage automatique** : efficacité du système à bloquer ou reclasser les actions potentiellement inappropriées avant leur exécution.\n- **Transparence éthique** : quantification de la capacité de l’orchestrateur à expliquer ses choix en termes de respect des normes (ex. : justification d’un agent utilisé, explication de la suppression d’une réponse).\n\n### **3. Traçabilité humaine**\n- **Niveau de transparence décisionnelle** : capacité à fournir une logique explicite et accessible sur chaque étape prise par l’orchestrateur (ex. : historique détaillé, arbre de décision, logs de sélection d’agents).\n- **Auditabilité des actions** : possibilité de suivre et de vérifier toutes les actions entreprises par l'orchestrateur et ses agents, y compris les raisons derrière ces actions.\n- **Responsabilisation** : attribution claire des responsabilités en cas d'erreur ou de problème, facilitant la prise de mesures correctives.\n- **Capacité de debugging humain** : temps moyen pour identifier et corriger un dysfonctionnement via une interface de diagnostic (ex. : outil de visualisation des flux, trace des interactions).\n- **Interprétabilité des métriques** : clarté et compréhension des métriques utilisées pour évaluer le système.\n\n### **4. Coût opérationnel**\n- **Coût total d'exploitation** : somme des coûts liés à l'exécution des tâches, y compris les coûts de calcul, de stockage et de maintenance.\n- **Coût de mise en œuvre** : frais initiaux nécessaires pour déployer et configurer l'orchestrateur, y compris les coûts de développement et de formation.\n\nCes métriques couvrent les aspects essentiels pour évaluer la performance, l'adaptabilité, l'éthique, la traçabilité et l'efficacité économique de votre orchestrateur multi-agents LLM.",
+          "baseLatency": 18908,
+          "cavLatency": 66364,
+          "baseTokens": 1152,
+          "cavTokens": 3082,
+          "baseScore": 9,
+          "cavScore": 7,
+          "winner": "baseline"
+        },
+        {
+          "query": "Comment détecter la dérive sémantique entre plusieurs experts sur une même requête ?",
+          "baselineText": "Pour détecter la dérive sémantique entre plusieurs experts sur une même requête, appliquez une méthode rigoureuse combinant analyse linguistique, représentation vectorielle et mesure de divergence. Voici le protocole opérationnel :\n\n1. **Standardisation des réponses**  \n   – Nettoyez chaque réponse (suppression des marques de ponctuation non sémantiques, normalisation des majuscules/minuscules, lemmatisation, filtrage des stop-words *contextuels* — pas systématique : certains connecteurs ou modaux portent du sens discursif).  \n   – Conservez les unités sémantiques pertinentes : syntagmes nominaux complexes, verbes d’action/état, marqueurs épistémiques (*« semble », « probablement », « selon X »*), et indices de positionnement (modalisateurs, évaluatifs, référents implicites).\n\n2. **Encodage sémantique fine**  \n   – Utilisez un modèle de langage *fine-tuné sur du discours expert* (ex. : SciBERT pour sciences, Legal-BERT pour droit, ou un modèle adapté à votre domaine) pour générer des embeddings au niveau **phrase**, **segment thématique**, ou **concept-clé extrait** (via NER + relation extraction).  \n   – Évitez les embeddings globaux de document : ils masquent les divergences locales. Privilégiez l’encodage par *unité sémantique atomique* (ex. : triplets sujet-prédicat-objet ou propositions déclaratives minimales).\n\n3. **Mesure de divergence sémantique**  \n   – Pour chaque paire d’experts (A, B), calculez :  \n     • **Divergence angulaire** entre embeddings de concepts alignés (ex. : cosinus distance entre vecteurs correspondant à « risque cardiovasculaire » chez A et B) ;  \n     • **Décalage distributionnel** via WMD (Word Mover’s Distance) ou EMD (Earth Mover’s Distance) sur l’ensemble des unités sémantiques ;  \n     • **Divergence pragmatique** : comparaison des profils modaux/épistémiques (fréquence relative de *« incertain », « établi », « hypothétique », « consensuel »*) → codage binaire ou ordinal + distance de Hamming ou Jensen-Shannon.  \n\n4. **Alignement sémantique supervisé (optionnel mais critique)**  \n   – Construisez un *lexique inter-expert* : identifiez manuellement ou via clustering (ex. : UMAP + HDBSCAN sur embeddings) les clusters de sens partagés vs. isolés. Une dérive se manifeste par :  \n     • Absence d’alignement bijectif entre clusters (ex. : expert A a un cluster « résilience écologique = capacité de rebond », expert B lie « résilience » uniquement à « stabilité du système » sans notion de perturbation) ;  \n     • Divergence dans les *relations sémantiques* (hyponymie, antonymie, causalité) entre termes communs.\n\n5. **Visualisation & seuillage**  \n   – Projetez les embeddings dans un espace 2D/3D (t-SNE ou UMAP) avec coloration par expert. Les regroupements intra-expert vs. chevauchements inter-experts révèlent la dérive.  \n   – Fixez un seuil de divergence (ex. : cosinus > 0.35 entre concepts appariés, ou JS divergence > 0.45 sur profils épistémiques) pour catégoriser la dérive comme *faible*, *modérée*, ou *forte*.\n\n6. **Validation par jugement expert externe**  \n   – Soumettez les paires divergentes à un troisième expert indépendant avec une grille de jugement sur :  \n     • Concordance référentielle (désignent-ils le même phénomène ?) ;  \n     • Équivalence opératoire (les définitions permettent-elles les mêmes mesures/interventions ?) ;  \n     • Cohérence théorique (la divergence est-elle justifiée par des cadres conceptuels distincts ?).\n\nRésultat final : une matrice de divergence (experts × concepts) + un graphe de désaccord sémantique, permettant d’identifier non seulement *où* la dérive survient, mais *pourquoi* (bia",
+          "caverneText": "Pour détecter la dérive sémantique entre plusieurs experts sur une même requête, il faut dépasser la simple comparaison lexicale ou statistique et mettre en œuvre une **analyse comparative structurée**, ancrée dans un référentiel sémantique partagé et contrôlée au niveau de la granularité conceptuelle.\n\nCommencez par définir un **cadre ontologique explicite** : soit une ontologie spécialisée (ex. UMLS pour le domaine médical, ou une adaptation de WordNet enrichie d’embeddings contextuels spécialisés), soit un corpus de base annoté manuellement sur les concepts clés de la requête — incluant leurs relations (hyponymie, antonymie, rôle causal, niveau d’abstraction). Ce référentiel sert de boussole : chaque réponse d’expert est projetée non pas comme un bloc textuel, mais comme un ensemble de *concepts activés*, avec leur niveau hiérarchique (macro/micro), leur poids sémantique relatif, et leurs liens logiques implicites.\n\nEnsuite, appliquez une double analyse :\n\n- **Quantitative** : utilisez des embeddings contextuels (ex. Sentence-BERT fine-tuné sur le domaine) pour encoder chaque réponse, puis calculez des mesures de similarité *segmentées* — non pas sur le texte global, mais sur les segments alignés au référentiel (ex. « résilience » → comparaison séparée des définitions, des mécanismes invoqués, des échelles d’application). Le clustering (DBSCAN préféré à k-means pour sa robustesse aux outliers) est utile ici, mais uniquement *après projection conceptuelle*, afin d’identifier des groupes qui ne reflètent pas des différences stylistiques ou discursives, mais bien des divergences dans l’activation, l’interprétation ou la hiérarchisation des concepts.\n\n- **Qualitative guidée** : cartographiez systématiquement trois dimensions critiques pour chaque expert :  \n  (a) *le noyau sémantique* — quels concepts sont centraux, quels autres sont absents ou marginalisés ?  \n  (b) *le niveau d’abstraction* — opère-t-il en termes de principe général, de processus, de protocole concret, ou de cas particulier ?  \n  (c) *la posture inférentielle* — quels liens causaux, normatifs ou conditionnels sont implicites dans sa réponse ?  \n\nCette approche neutralise les trois failles méthodologiques courantes : elle élimine la dépendance aux similarités superficielles, contrôle le biais de granularité via l’annotation hiérarchique explicite, et désamorce les biais discursifs en dissociant forme rhétorique et contenu conceptuel activé. La dérive n’est alors plus une impression — c’est une divergence mesurable, localisable, et interprétable : *où*, *à quel niveau*, et *sur quoi* les experts cessent de parler du même objet, même s’ils utilisent les mêmes mots.",
+          "baseLatency": 18981,
+          "cavLatency": 21302,
+          "baseTokens": 1148,
+          "cavTokens": 2366,
+          "baseScore": 9,
+          "cavScore": 8,
+          "winner": "baseline"
+        }
+      ],
+      "metrics": [
+        {
+          "label": "qualité",
+          "baseline": 9,
+          "caverne": 7.5,
+          "gainPct": -16.67
+        },
+        {
+          "label": "latence p95",
+          "baseline": 18981,
+          "caverne": 66364,
+          "gainPct": -249.63
+        },
+        {
+          "label": "latence moyenne",
+          "baseline": 18944.5,
+          "caverne": 43833,
+          "gainPct": -131.38
+        },
+        {
+          "label": "coût/1k",
+          "baseline": 0.0012,
+          "caverne": 0.001433,
+          "gainPct": -19.46
+        },
+        {
+          "label": "tokens",
+          "baseline": 2300,
+          "caverne": 5448,
+          "gainPct": -136.87
+        },
+        {
+          "label": "tokens/moyenne",
+          "baseline": 1150,
+          "caverne": 2724,
+          "gainPct": -136.87
+        }
+      ],
+      "ts": 1784385913221,
+      "useCase": "analyse",
+      "useCaseNom": "Analyse de données & métriques",
+      "wallMs": 128303
+    }
+  ]
+}

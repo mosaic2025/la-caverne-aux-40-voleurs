@@ -238,5 +238,5 @@
 - ✅ Onglet La Lampe : déblocage `shazaam`, avatar Nour cross-onglets, forge Voleur à son image.
 - ✅ UI LeConnecteur : contributions, stats, recherche fédérée, graphe de concepts.
 - ⬜ Vision / multimodal avancé (L53-L58, L67-L72) : dépend de `DASHSCOPE_API_KEY`.
-- ⬜ Fable 5 / OpenRouter (L73-L78) : routes prêtes, dépend de `OPENROUTER_API_KEY`.
+- ✅ Fable 5 (L73-L78) : repointé sur Qwen Cloud, validé via `/api/fable5`. Aucune clé OpenRouter.
 - ✅ Validation : `npm run typecheck` OK, `npm run build` OK, `node server/tests/architecture.test.mjs` 18/18 OK.

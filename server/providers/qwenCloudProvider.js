@@ -12,12 +12,16 @@ export class QwenCloudProvider extends BaseProvider {
    * @returns {Promise<{embedding: number[], tokens: number}>}
    */
   async embedText(text) {
-    const { embedding, tokens } = await dsFetch("/embeddings", {
+    const r = await dsFetch("/embeddings", {
       model: "text-embedding-v3",
       input: String(text).slice(0, 8000),
       dimensions: 1024,
       encoding_format: "float",
     });
+    // DashScope (mode OpenAI-compatible) : { data: [{embedding}], usage: {total_tokens} }
+    const embedding = Array.isArray(r?.data) ? r.data[0]?.embedding : r?.output?.embeddings?.[0]?.embedding;
+    const tokens = r?.usage?.total_tokens ?? 0;
+    if (!Array.isArray(embedding)) throw new Error("embedding DashScope introuvable");
     return { embedding, tokens };
   }
 

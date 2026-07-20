@@ -1,14 +1,11 @@
 // ============================================================
-// L75-L76 — Fallback intelligent + cost routing pour Fable 5 / OpenRouter
+// L75-L76 — Fallback intelligent + cost routing pour Fable 5 (Qwen Cloud)
 // ============================================================
 
 import { Fable5Client, FABLE5_MODELS } from "./fable5Client.mjs";
 
 // Prix indicatifs par 1k tokens (prompt + completion moyen)
-const COSTS = {
-  "anthropic/claude-fable-5": 0.006,
-  "anthropic/claude-5-fable-20260609": 0.008,
-};
+const COSTS = { "qwen-plus": 0.0012, "qwen-max": 0.006 };
 
 export async function askWithFallback(prompt, { models = FABLE5_MODELS, system = "", maxTokens = 1024 } = {}) {
   const errors = [];

@@ -15,6 +15,6 @@ export function aggregateResponses(responses) {
   return {
     ...best.r,
     ensemble: responses.map((r) => ({ model: r.model, text: r.text, tokens: r.totalTokens })),
-    note: "Réponse choisie par vote simple parmi les modèles OpenRouter/Fable 5.",
+    note: "Réponse choisie par vote simple parmi les modèles Fable 5 (Qwen Cloud).",
   };
 }

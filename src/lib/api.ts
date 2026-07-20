@@ -18,6 +18,30 @@ export interface DebatResult {
   ts: number;
 }
 
+export interface CampRecrue {
+  nom: string; specialite: string; provider: string; modele: string;
+  effort: "low" | "med" | "high"; systemPrompt: string; capTokens: number; justification: string;
+}
+export interface CampAudit {
+  fragilities: { faille: string; gravite: number }[];
+  gangRival: { nom: string; specialite: string; cible: string; attaque: string }[];
+  verdict: { resilience: number; resume: string };
+  recrue: CampRecrue | null;
+  ts: number;
+}
+export interface CampForge {
+  escouade: CampRecrue[];
+  debat: { voleur: string; plaidoirie: string; remplace: string | null }[];
+  verdict: string;
+  ts: number;
+}
+export interface CampSigil {
+  svg: string;
+  maree: { hue: number; bpm: number; glyph: string; description: string };
+  seed: number;
+  ts: number;
+}
+
 export interface PipelineStep {
   voleurId: string;
   consigne: string;
@@ -109,6 +133,14 @@ export const api = {
       orchestrateur?: { modele: string; provider?: string; effort: "low" | "med" | "high"; systemPrompt: string; capTokens: number };
     }>("/api/genies/forge-chat", { method: "POST", body: JSON.stringify({ description }) }),
 
+  // ---- Le Camp — features jury (Embûche / Conciliabule / Sceaux) ----
+  campAudit: (focus?: string) =>
+    j<CampAudit>("/api/camp/audit", { method: "POST", body: JSON.stringify({ focus }) }),
+  campForge: (mission: string) =>
+    j<CampForge>("/api/camp/forge", { method: "POST", body: JSON.stringify({ mission }) }),
+  campSigil: (payload: { voleurId?: string; nom?: string; specialite?: string; systemPrompt?: string }) =>
+    j<CampSigil>("/api/camp/sigil", { method: "POST", body: JSON.stringify(payload) }),
+
   listRuns: () => j<MoeRun[]>("/api/runs"),
   duel: (voleurAId: string, voleurBId: string, query: string, judgeProvider?: string, judgeModel?: string) =>
     j<DuelResult>("/api/conseil/duel", { method: "POST", body: JSON.stringify({ voleurAId, voleurBId, query, judgeProvider, judgeModel }) }),
@@ -172,7 +204,7 @@ export const api = {
   generateImage: (prompt: string) => j<{ taskId: string; status: string; results?: { url?: string; prompt: string; note?: string }[] }>("/api/gen/image", { method: "POST", body: JSON.stringify({ prompt }) }),
   generateVideo: (prompt: string) => j<{ taskId: string; status: string; note?: string }>("/api/gen/video", { method: "POST", body: JSON.stringify({ prompt }) }),
   visionAnalyze: (imageUrl: string, prompt?: string) => j<{ text: string; tokens: number }>("/api/vision/analyze", { method: "POST", body: JSON.stringify({ imageUrl, prompt }) }),
-  fable5: (prompt: string, model = "anthropic/claude-fable-5", { system, maxTokens, temperature }: { system?: string; maxTokens?: number; temperature?: number } = {}) =>
+  fable5: (prompt: string, model = "qwen-plus", { system, maxTokens, temperature }: { system?: string; maxTokens?: number; temperature?: number } = {}) =>
     j<{ text: string; promptTokens: number; completionTokens: number; totalTokens: number; latencyMs: number }>("/api/fable5", { method: "POST", body: JSON.stringify({ prompt, model, system, maxTokens, temperature }) }),
 
   /** Stream SSE de /api/ask. yield {event, data} au fil de l'eau. */

@@ -4,6 +4,7 @@ import { LeCamp } from "./panels/LeCamp";
 import { LeRepaire } from "./panels/LeRepaire";
 import { LeConseil } from "./panels/LeConseil";
 import { LeGenie } from "./panels/LeGenie";
+import { LObservatoire } from "./panels/LObservatoire";
 import { LesTresors } from "./panels/LesTresors";
 import { LAtelier } from "./panels/LAtelier";
 import { LaNuitEtoilee } from "./panels/LaNuitEtoilee";
@@ -19,6 +20,7 @@ const ONGLETS = [
   { id: "camp", label: "Le Camp", el: <LeCamp /> },
   { id: "repaire", label: "Le Repaire", el: <LeRepaire /> },
   { id: "genie", label: "Le Génie", el: <LeGenie /> },
+  { id: "observatoire", label: "L'Observatoire", el: <LObservatoire /> },
   { id: "conseil", label: "Le Conseil", el: <LeConseil /> },
   { id: "arene", label: "Arène du Sabre", el: <LAreneSabre /> },
   { id: "miroir", label: "Le Miroir", el: <LeMiroir /> },

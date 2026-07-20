@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>La Caverne aux 40 Voleurs — Qwen Cloud Hackathon 2026</title>
+<style>
+  :root{--g:#c9a227;--v:#6a4c93;--bg:#0f1117;--fg:#e8e6e3}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:18px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
+  .slide{min-height:100vh;padding:60px 8vw;display:flex;flex-direction:column;justify-content:center;border-bottom:1px solid #222;page-break-after:always}
+  h1{font-size:2.6em;color:var(--g);margin:0 0 .2em;line-height:1.1}
+  h2{font-size:1.5em;color:var(--v);margin:0 0 .6em;border-bottom:2px solid var(--v);padding-bottom:.2em}
+  h3{color:var(--g);margin:1em 0 .3em}
+  .sub{color:#9a9;font-size:1.1em;margin-bottom:1em}
+  table{border-collapse:collapse;width:100%;margin:.5em 0;font-size:.95em}
+  th,td{border:1px solid #333;padding:6px 10px;text-align:right}
+  th:first-child,td:first-child{text-align:left}
+  th{background:#1a1d27;color:var(--g)}
+  code{background:#1a1d27;padding:2px 6px;border-radius:4px;color:var(--g);font-size:.9em}
+  ul{padding-left:1.2em}
+  li{margin:.25em 0}
+  .badges{margin:.5em 0}
+  .badges span{display:inline-block;background:#1a1d27;color:var(--g);border:1px solid var(--v);border-radius:20px;padding:3px 12px;margin:3px;font-size:.85em}
+  .accent{color:var(--g);font-weight:700}
+  .bad{color:#e66}
+  .good{color:#6d6}
+  .quote{font-style:italic;color:#bbb;border-left:3px solid var(--v);padding-left:14px;margin:.5em 0}
+  .footer{color:#666;font-size:.8em;margin-top:1em}
+  @media print{.slide{min-height:auto;padding:30px 40px}}
+</style></head><body>
+
+<section class="slide">
+  <h1>La Caverne aux 40 Voleurs</h1>
+  <p class="sub">An adaptive multi-agent MoE orchestrator on Qwen Cloud</p>
+  <div class="badges">
+    <span>81/81 layers verified</span><span>25/25 tests</span><span>typecheck ✓</span><span>build ✓</span><span>MoE v2: +23% quality</span>
+  </div>
+  <p class="quote">"Ali Baba had 40 thieves. You have 40 Qwen experts — and a Genie that knows when NOT to convene them."</p>
+  <p class="footer">Qwen Cloud Global AI Hackathon 2026 · github.com/mosaic2025/la-caverne-aux-40-voleurs</p>
+</section>
+
+<section class="slide">
+  <h2>Problem</h2>
+  <ul>
+    <li>One strong LLM alone = expensive, often overkill on simple tasks.</li>
+    <li>A naive MoE = <span class="bad">dilutes the thesis</span> on analytical tasks (multi-expert fusion kills the reasoning).</li>
+    <li>The real challenge is not "build a MoE" — it's <span class="accent">knowing when to activate it</span>.</li>
+  </ul>
+</section>
+
+<section class="slide">
+  <h2>Solution — adaptive orchestrator</h2>
+  <p>The Genie classifies every query <em>before</em> routing:</p>
+  <ul>
+    <li><strong>Analytical mono-domain</strong> → delegation to 1 strong expert, <strong>no fusion</strong> (k=1).</li>
+    <li><strong>Constructive multi-domain</strong> → top-k experts + <strong>editor-in-chief fusion</strong> (one narrator, not a patchwork).</li>
+    <li><strong>Mode veto</strong> — confronts fusion with the best single expert and <strong>rejects its own fusion</strong> if single wins.</li>
+  </ul>
+  <p class="quote">The claim is not "we have 40 experts", it's "we know when to use only one."</p>
+</section>
+
+<section class="slide">
+  <h2>Hero table — v1 → v2 (the flip)</h2>
+  <table>
+    <tr><th>Case (judge /20)</th><th>qwen-turbo</th><th>MoE v1 naive</th><th>MoE v2 adaptive</th></tr>
+    <tr><td>secure login</td><td>14.30</td><td>16.00</td><td>10.80</td></tr>
+    <tr><td>microservices migration</td><td>13.80</td><td>17.67</td><td class="good">18.60</td></tr>
+    <tr><td>pure refactor</td><td>13.20</td><td>19.67</td><td>16.70</td></tr>
+    <tr><td><strong>consistency</strong></td><td>11.90</td><td class="bad">13.33 ❌</td><td class="good">19.50 ✅ (5/5 unanimous)</td></tr>
+    <tr><td><strong>Global</strong></td><td><strong>13.30</strong></td><td>16.67 (+4%)</td><td class="good">16.40 (+23%) · 12/20 consensus</td></tr>
+  </table>
+  <p class="footer">The v1 regression on consistency is <em>the discovery that motivated v2</em>.</p>
+</section>
+
+<section class="slide">
+  <h2>Credible measurement methodology</h2>
+  <ul>
+    <li><strong>Pairwise A/B randomized</strong> — anti position bias.</li>
+    <li><strong>Double judge</strong> — qwen-max + qwen-plus, victory <em>only if both agree</em> (tie otherwise — judge noise acknowledged).</li>
+    <li>4-criteria rubric (exactitude, complementation, depth, actionability) × 0–5 = /20.</li>
+    <li><strong>5 reps</strong> per question (up to 10), mean ± std. Baseline = qwen-turbo single agent, same prompt, same judge.</li>
+  </ul>
+</section>
+
+<section class="slide">
+  <h2>Product identity — Le Camp</h2>
+  <ul>
+    <li><strong>L'Embûche</strong> — an adversarial strategist audits the gang's robustness and recruits a breakthrough expert.</li>
+    <li><strong>Le Conciliabule</strong> — an MoE recruiter forms the optimal squad from a natural-language mission, then runs a recruitment debate.</li>
+    <li><strong>Les Sceaux</strong> — generative SVG sigil + dynamic tide; every Genie has its own crest.</li>
+  </ul>
+</section>
+
+<section class="slide">
+  <h2>Real-time observability</h2>
+  <p><strong>L'Observatoire</strong> (live SSE) shows the orchestrator's reasoning, not just the final answer:</p>
+  <p>which agent is selected · why (embedding × perf score) · cost per agent · latency · confidence · fusion · <strong>veto</strong> · decision history.</p>
+</section>
+
+<section class="slide">
+  <h2>Architecture — 81/81 layers verified</h2>
+  <ul>
+    <li><code>node scripts/audit-layers.mjs</code> → L0–L80, <strong>81/81 implemented</strong> (reproducible script, not a manual checklist).</li>
+    <li><strong>25/25 tests</strong> green, typecheck green, build green.</li>
+    <li>Zero heavy dependencies: native Node ESM + React + Vite.</li>
+    <li>Providers: <strong>Qwen Cloud / AI Studio / Alibaba Cloud / Ollama Cloud only</strong>.</li>
+    <li>Qwen family: qwen-turbo (router) · qwen-plus (experts) · qwen-coder-plus (code) · qwen-max (fusion + judge) · text-embedding-v3 · z-image-turbo · wan2.1.</li>
+  </ul>
+</section>
+
+<section class="slide">
+  <h2>Live demo (5 min)</h2>
+  <ol>
+    <li><code>sh scripts/run-demo.sh</code> → seeded Caverne + backend.</li>
+    <li><strong>Le Camp</strong> → L'Embûche, Le Conciliabule, Les Sceaux.</li>
+    <li>Analytical question → <strong>single-expert delegation</strong> (visible in L'Observatoire).</li>
+    <li>Multi-domain question → <strong>top-k + editor fusion</strong> (+ veto if enabled).</li>
+    <li><code>node scripts/bench-hard.mjs</code> → live baseline vs Champion table.</li>
+  </ol>
+</section>
+
+<section class="slide">
+  <h1>Open, Sesame.</h1>
+  <p class="sub">An orchestrator that knows when not to be a MoE.<br>A regression turned into a discovery. A story, not a demo.</p>
+  <p class="accent">Repo: github.com/mosaic2025/la-caverne-aux-40-voleurs</p>
+  <p class="footer">Qwen Cloud / Alibaba Cloud · Node ESM · React · TypeScript · Vite</p>
+</section>
+
+</body></html>

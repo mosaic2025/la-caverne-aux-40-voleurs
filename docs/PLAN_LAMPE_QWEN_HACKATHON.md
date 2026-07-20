@@ -4,7 +4,7 @@
 > **Projet** : `la-caverne-aux-40-voleurs`  
 > **Scope** : onglet secret "La Lampe", compagnon avatar (inspiration Genesis Anima)  
 > **Orchestrateur local** : Codex CLI (Termux)  
-> **Candidats cloud auditionnés** : `glm-5.2:cloud` et `gemma4:31b-cloud` via Ollama Cloud *(Fable 5 / OpenRouter n'a pas pu être joint directement : clé `OPENROUTER_API_KEY` absente de l'environnement)*.
+> **Candidats cloud auditionnés** : `glm-5.2:cloud` et `gemma4:31b-cloud` via Ollama Cloud *(Fable 5 désormais via Qwen Cloud — conformément à la contrainte provider : Qwen / Alibaba / Ollama Cloud uniquement)*.
 
 ---
 
@@ -227,8 +227,8 @@ La Lampe est le **meilleur argument émotionnel** pour Qwen Cloud :
 
 ## 8. Blockers
 
-- ❌ `OPENROUTER_API_KEY` manquante : Fable 5 n'a pas pu être audité en direct.
+- ✅ Contrainte provider respectée : Qwen Cloud / Alibaba / Ollama Cloud uniquement (OpenRouter exclu).
 - ✅ `DASHSCOPE_API_KEY` : présente dans `.env.example` mais non testée en conditions réelles ici.
 - ✅ Ollama Cloud / GLM 5.2 / Gemma 4 31b : disponibles et auditionnés.
 
-**Prochaine étape** : fournir `OPENROUTER_API_KEY` pour valider Fable 5 comme orchestrateur Ollama Cloud, ou confirmer GLM 5.2 comme orchestrateur technique officiel Ollama Cloud dès maintenant.
+**Prochaine étape** : confirmer GLM 5.2 (Ollama Cloud) comme orchestrateur technique officiel, Fable 5 restant un pont Qwen Cloud.

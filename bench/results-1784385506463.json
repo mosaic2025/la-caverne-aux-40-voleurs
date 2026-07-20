@@ -1,0 +1,27 @@
+{
+  "genieId": "gen_42i6gjwd",
+  "api": "http://localhost:8787",
+  "ts": 1784385506463,
+  "results": [
+    {
+      "useCase": "concurrency",
+      "useCaseNom": "Concurrence & performance Node",
+      "error": "/api/benchmark 500: {\"error\":\"Budget épuisé pour le Génie \\\"Génie de la Caverne\\\" (reliquat=null)\"}"
+    },
+    {
+      "useCase": "archi",
+      "useCaseNom": "Architecture & migration microservices",
+      "error": "/api/benchmark 500: {\"error\":\"Budget épuisé pour le Génie \\\"Génie de la Caverne\\\" (reliquat=null)\"}"
+    },
+    {
+      "useCase": "code",
+      "useCaseNom": "Code & typage TypeScript",
+      "error": "/api/benchmark 500: {\"error\":\"Budget épuisé pour le Génie \\\"Génie de la Caverne\\\" (reliquat=null)\"}"
+    },
+    {
+      "useCase": "analyse",
+      "useCaseNom": "Analyse de données & métriques",
+      "error": "/api/benchmark 500: {\"error\":\"Budget épuisé pour le Génie \\\"Génie de la Caverne\\\" (reliquat=null)\"}"
+    }
+  ]
+}

@@ -24,7 +24,7 @@ export async function embedText(text, providerName = "qwen-cloud") {
   const providers = [providerName, "ollama", "qwen-cloud"];
   for (const p of [...new Set(providers)]) {
     try {
-      const provider = getProvider(p);
+      const provider = await getProvider(p);
       const r = await provider.embedText(text);
       if (Array.isArray(r.embedding) && r.embedding.length > 0) return r;
     } catch (e) {

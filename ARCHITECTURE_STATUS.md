@@ -23,7 +23,7 @@
 - `server/humanity/empathy.mjs` — détection de ton (urgent/positif/frustré/curieux/neutre).
 
 ### Fable 5 cache
-- `server/fable5/cache.mjs` — cache mémoire OpenRouter/Fable 5 avec TTL 1h.
+- `server/fable5/cache.mjs` — cache mémoire Fable 5 (Qwen Cloud) avec TTL 1h.
 - `server/fable5/fable5Client.mjs` — intègre le cache.
 
 ### Avatar Gen
@@ -60,12 +60,12 @@
 - `server/routes/meta.mjs` : routes `/api/meta/capabilities`, `/api/meta/orchestrate`, `/api/shared-knowledge/*`, `/api/tts`, `/api/vision/analyze`, `/api/fable5`.
 - Onglet UI `src/panels/LeConnecteur.tsx` intégré dans `App.tsx`.
 
-### Fable 5 + OpenRouter
-- `server/fable5/openrouterProvider.mjs` — provider OpenRouter.
+### Fable 5 (pont Qwen Cloud)
+- `server/fable5/fable5Client.mjs` — pont Fable 5 repointé sur Qwen Cloud (DashScope).
 - `server/fable5/fable5Client.mjs` — client Fable 5.
 - `server/fable5/fallback.mjs` — fallback intelligent + cost routing.
 - `server/fable5/aggregator.mjs` — agrégation de réponses.
-- `server/providers/providerFactory.js` — enregistre `openrouter` comme provider.
+- `server/providers/providerFactory.js` — enregistre `qwen-cloud`, `alibaba`, `ollama` (providers autorisés uniquement).
 - `scripts/ask-fable5.mjs` — script CLI pour questionner Fable 5.
 
 ### Génération multimodale (L67-L72)
@@ -99,7 +99,7 @@
 - ✅ **Jour 2** : `NourOrb.tsx` injecté dans `AssistantPanel.tsx` avec murmures contextuels ; `voiceHint` Nour fusionné dans la voix du Génie.
 - ✅ **Jour 3 (partiel)** : route `/api/avatar/:userId/forge-voleur` pour créer un Voleur calibré sur les shards de Nour.
 - ⬜ **Jour 3 (reste)** : permettre à Nour de devenir `orchestrateurId` d'un Génie via l'UI Le Génie.
-- **Bloquer** : `OPENROUTER_API_KEY` manquante pour valider Fable 5 en direct.
+- ✅ **Fable 5** : repointé sur Qwen Cloud, validé en direct via `/api/fable5`.
 
 ## 🏛️ Consolidation des piliers 80 couches
 
@@ -116,10 +116,10 @@
 
 1. **Tests** : ajouter des tests pour les nouvelles couches.
 2. **SharedMind avancé** : graphe de concepts, recherche fédérée, consensus sémantique.
-3. **Fable5** : cache OpenRouter, tests en conditions réelles avec clé OpenRouter.
+3. **Fable5** : ✅ repointé sur Qwen Cloud, testé en direct via `/api/fable5`.
 4. **Humanité** : mémoire long terme, portrait vivant animé.
 5. **Profilage** : profil cognitif, technique, émotionnel, voiceHint dynamique.
-6. **Battle La Lampe** : ✅ exécutée via Ollama Cloud (GLM 5.2 vs Gemma 4 31b). Fable 5 en attente de `OPENROUTER_API_KEY`.
+6. **Battle La Lampe** : ✅ exécutée via Ollama Cloud (GLM 5.2 vs Gemma 4 31b). Fable 5 ✅ via Qwen Cloud.
 7. **La Lampe jour 3** : Nour orchestrateur + contrat MAXI "Voleur à mon image".
 8. **Piliers 80 couches** : ✅ fondations consolidées (L0-L6, L7-L14, L15-L22 KB vector store + recherche fédérée avec fallback Ollama, L23-L30, L31-L36, L37-L44, L45-L52, L59-L66, L79-L80). Reste : L53-L58 vision, L67-L72 multimodal avancé, L73-L78 Fable 5 en conditions réelles (bloqué par clés API).
 
@@ -127,7 +127,7 @@
 
 - `npm run typecheck` : OK.
 - `npm run build` : OK.
-- `node server/tests/architecture.test.mjs` : 16/16 OK.
+- `node server/tests/architecture.test.mjs` : 18/18 OK.
 - Serveur backend : import OK.
 - Routes `/api/avatar/:userId`, `/api/avatar/:userId/evolve`, `/api/avatar/:userId/voice-hint`, `/api/avatar/:userId/forge-voleur` : OK.
 - Déblocage magique `shazaam` via `/api/atelier/run` : OK.

@@ -17,6 +17,7 @@ import { recordFeedback, getAverageRating } from "../profiles/learning.mjs";
 import { buildAvatarPrompt } from "../gen/avatarGen.mjs";
 import { cacheSet, cacheGet, cacheStats } from "../fable5/cache.mjs";
 import { compressHistory } from "../humanity/memoryLongTerm.mjs";
+import { classifyTask, judgeQuality, runModeVeto, JUDGE_MODELS } from "../moe.mjs";
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -83,10 +84,10 @@ await testAsync("meta orchestrator routes code", async () => {
   if (r.model !== "qwen-coder-plus") throw new Error(`expected qwen-coder-plus, got ${r.model}`);
 });
 
-await testAsync("meta orchestrator routes fable5", async () => {
+await testAsync("meta orchestrator routes fable5 (qwen cloud)", async () => {
   const o = new MetaOrchestrator({});
-  const r = await o.route({ intent: { type: "chat", model: "anthropic/claude-fable-5" }, complexity: 0.5, sensitivity: 0, budget: 1 });
-  if (r.provider !== "openrouter") throw new Error(`expected openrouter, got ${r.provider}`);
+  const r = await o.route({ intent: { type: "chat", model: "qwen-plus" }, complexity: 0.5, sensitivity: 0, budget: 1 });
+  if (r.provider !== "qwen-cloud") throw new Error(`expected qwen-cloud, got ${r.provider}`);
 });
 
 test("guard input detects injection", () => {
@@ -110,7 +111,7 @@ test("companion agent evolves", () => {
 
 test("fable5 fallback cheapest model", () => {
   const m = cheapestModel();
-  if (!m.includes("claude-fable")) throw new Error(`unexpected cheapest model ${m}`);
+  if (!["qwen-plus", "qwen-max"].includes(m)) throw new Error(`unexpected cheapest model ${m}`);
 });
 
 test("fable5 cache roundtrip", () => {
@@ -156,6 +157,53 @@ test("memory compression", () => {
   const messages = Array.from({ length: 100 }, (_, i) => ({ role: i % 2 === 0 ? "user" : "assistant", content: `message ${i} `.repeat(50) }));
   const compressed = compressHistory(messages, 1000);
   if (compressed.length > 1000) throw new Error("compression failed");
+});
+
+// ---- Tests des couches avancées (délégation, juge pairwise, veto mode, routes) ----
+
+test("classifyTask délègue l'analyse mono-domaine", () => {
+  const t = classifyTask("Explique la différence entre eventual et strong consistency pour un panier");
+  if (t.type !== "analyse") throw new Error("type attendu analyse, got " + t.type);
+  if (!t.delegate) throw new Error("analyse mono-domaine devrait déléguer (delegate=true), domains=" + t.domains);
+});
+
+test("classifyTask ne délègue pas le code multi-domaine", () => {
+  const t = classifyTask("Implémente un endpoint Express TypeScript et propose l'architecture microservices de migration");
+  if (t.type !== "code" && t.type !== "archi") throw new Error("type attendu code/archi, got " + t.type);
+  if (t.delegate) throw new Error("tâche multi-domaine ne doit pas déléguer, domains=" + t.domains);
+});
+
+test("classifyTask délègue les très faibles complexités", () => {
+  // requête courte sans mot-clé de domaine -> domains=0, complexité < 0.4 -> délégation
+  const t = classifyTask("résume brièvement");
+  if (t.domains !== 0) throw new Error("domains attendu 0, got " + t.domains);
+  if (t.complexity >= 0.4) throw new Error("complexité attendue < 0.4, got " + t.complexity);
+  if (!t.delegate) throw new Error("faible complexité sans domaine devrait déléguer");
+});
+
+test("juge pairwise double-juge configuré", () => {
+  if (typeof judgeQuality !== "function") throw new Error("judgeQuality n'est pas une fonction");
+  if (!Array.isArray(JUDGE_MODELS) || JUDGE_MODELS.length < 2) throw new Error("JUDGE_MODELS doit avoir >= 2 juges");
+  if (!JUDGE_MODELS.includes("qwen-max") || !JUDGE_MODELS.includes("qwen-plus")) throw new Error("juges attendus: qwen-max + qwen-plus");
+});
+
+test("veto sur le mode exporté", () => {
+  if (typeof runModeVeto !== "function") throw new Error("runModeVeto n'est pas exporté");
+});
+
+test("route portrait chargée et prioritaire (order 100)", async () => {
+  const m = await import("../routes/portrait.mjs");
+  if (m.order !== 100) throw new Error("order attendu 100, got " + m.order);
+  // chemin non matchant -> handle renvoie false sans toucher ctx
+  const url = new URL("http://x/api/genies");
+  const ok = await m.handle({ method: "GET", url }, {}, url, ["api", "genies"], { helpers: {} });
+  if (ok) throw new Error("handle ne doit pas capter /api/genies");
+});
+
+test("route camp (Embûche/Conciliabule/Sceaux) chargée", async () => {
+  const m = await import("../routes/camp.mjs");
+  if (m.order !== 90) throw new Error("order attendu 90, got " + m.order);
+  if (typeof m.handle !== "function") throw new Error("camp.handle manquant");
 });
 
 console.log(`\nRésultat : ${passed} passé(s), ${failed} échec(s)`);

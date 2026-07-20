@@ -397,6 +397,24 @@ const server = http.createServer(async (req, res) => {
       if (req.method === "GET" && parts.length === 2) {
         return sendJson(res, 200, store.genies);
       }
+      // DELETE /api/genies/:id — supprime le Génie (et exiler ses voleurs si ?cascade=1)
+      if (req.method === "DELETE" && parts.length === 3) {
+        const idx = store.genies.findIndex((g) => g.id === parts[2]);
+        if (idx === -1) return sendError(res, 404, "Génie introuvable");
+        const g = store.genies[idx];
+        const cascade = url.searchParams.get("cascade") === "1";
+        if (cascade) {
+          for (const vid of g.voleursIds || []) {
+            const vi = store.voleurs.findIndex((v) => v.id === vid);
+            if (vi !== -1) store.voleurs.splice(vi, 1);
+          }
+        }
+        store.genies.splice(idx, 1);
+        save();
+        res.writeHead(204);
+        res.end();
+        return;
+      }
       if (req.method === "POST" && parts.length === 2) {
         const body = await readBody(req);
         const errors = validateGenieInput(body, store);
@@ -708,7 +726,7 @@ Règles : 2 à 6 experts regroupés en 1-3 spécialisations. Modeles qwen-cloud:
     // ----- BENCHMARK -----
     if (req.method === "POST" && url.pathname === "/api/benchmark") {
       const body = await readBody(req);
-      const { genieId, baseline, baselineProvider, questions } = body;
+      const { genieId, baseline, baselineProvider, questions, repeats } = body;
       if (typeof genieId !== "string") return sendError(res, 400, "genieId requis");
       if (typeof baseline !== "string" || !baseline.trim()) return sendError(res, 400, "baseline (modèle) requis");
       const provider = baselineProvider || DEFAULT_PROVIDER;
@@ -716,6 +734,7 @@ Règles : 2 à 6 experts regroupés en 1-3 spécialisations. Modeles qwen-cloud:
       if (!genie) return sendError(res, 404, "Génie introuvable");
 
       const questionList = Array.isArray(questions) && questions.length > 0 ? questions : BENCH_QUESTIONS;
+      const repeatN = Math.max(1, Math.min(10, Math.floor(Number(repeats) || 1)));
 
       const baseLatencies = [];
       const cavLatencies = [];
@@ -726,6 +745,7 @@ Règles : 2 à 6 experts regroupés en 1-3 spécialisations. Modeles qwen-cloud:
       const rounds = [];
 
       for (const q of questionList) {
+        for (let rep = 0; rep < repeatN; rep++) {
         // Baseline (agent unique)
         const b = await runBaseline({ model: baseline, query: q, maxTokens: 1024, providerName: provider });
         baseLatencies.push(b.latencyMs);
@@ -748,7 +768,7 @@ Règles : 2 à 6 experts regroupés en 1-3 spécialisations. Modeles qwen-cloud:
         store.runs.push(run);
         if (store.runs.length > 500) store.runs = store.runs.slice(-500);
 
-        // Juge qualité qwen-max (A = baseline, B = caverne, anonymisé)
+        // Juge qualité — double juge (qwen-max + qwen-plus) pairwise A/B randomisé
         const j = await judgeQuality({
           query: q,
           baselineAnswer: b.text,
@@ -767,8 +787,13 @@ Règles : 2 à 6 experts regroupés en 1-3 spécialisations. Modeles qwen-cloud:
           cavTokens: run.tokens.total,
           baseScore: j.baseline,
           cavScore: j.caverne,
-          winner: j.caverne > j.baseline ? "caverne" : (j.baseline > j.caverne ? "baseline" : "tie"),
+          criteria: j.criteria || null,
+          judges: j.judges || null,
+          positionSwap: !!j.positionSwap,
+          rep,
+          winner: j.winner || (j.caverne > j.baseline ? "caverne" : (j.baseline > j.caverne ? "baseline" : "tie")),
         });
+        }
       }
       save();
 

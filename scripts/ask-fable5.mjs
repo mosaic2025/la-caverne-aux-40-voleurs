@@ -1,4 +1,4 @@
-// Usage : OPENROUTER_API_KEY=sk-xxx node scripts/ask-fable5.mjs "ma question"
+// Usage : DASHSCOPE_API_KEY=sk-xxx node scripts/ask-fable5.mjs "ma question"  (Fable 5 bridge → Qwen Cloud)
 import { Fable5Client } from "../server/fable5/fable5Client.mjs";
 
 const question = process.argv.slice(2).join(" ") || "Présente-toi brièvement.";

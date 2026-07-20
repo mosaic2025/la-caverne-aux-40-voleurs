@@ -32,12 +32,12 @@
 
 ## Phase 4 — Connecteur cloud (✅ structure, ⏳ tests réseau)
 
-- [x] Provider OpenRouter
+- [x] Provider Qwen Cloud (DashScope) — OpenRouter abandonné (contrainte provider)
 - [x] Client Fable 5
 - [x] Fallback intelligent + cost routing
 - [x] Agrégation de réponses
-- [x] Cache OpenRouter
-- [x] Tests end-to-end Fable 5 (mode démo OK — besoin clé OpenRouter pour réel)
+- [x] Cache Fable 5 (Qwen Cloud)
+- [x] Tests end-to-end Fable 5 (mode démo OK — besoin clé DashScope pour réel)
 - [x] Tests end-to-end OCR/TTS/image (mode démo OK — besoin clé DashScope pour réel)
 
 ## Phase 5 — Onglet La Lampe (✅ prototype)
