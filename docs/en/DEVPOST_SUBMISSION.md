@@ -44,7 +44,14 @@ Per-case detail from the longest run (5 reps, 20 rounds, `bench/hard-17844620601
 **Architecture:** 81 functional layers (L0–L80), each proven **implemented** — a real file exporting a real symbol — by a reproducible audit script (`scripts/audit-layers.mjs`); behaviour is covered separately by 25/25 green tests, plus typecheck and build green. Zero heavy dependencies: native Node ESM backend + React/Vite/TS frontend.
 
 ## Track
-**AI Showrunner** — La Caverne is an agent orchestrator that casts, routes, fuses and self-corrects a troupe of Qwen experts to "produce" a single coherent answer, exactly the showrunner metaphor.
+**Agent Society** — La Caverne is a multi-agent collaboration system in the exact terms the track asks for:
+
+- **Distinct capabilities** — a roster of specialized Qwen "thieves", each with its own domain prompt and model tier (`qwen-plus`, `qwen-coder-plus`).
+- **Task division & decomposition** — the adaptive delegation gate (L79) classifies each query and splits it across the right number of agents: one expert for analytical mono-domain work, top-k for constructive multi-domain work.
+- **Role assignment** — routing scores each agent by `cosine(query, expert) × (0.6 + 0.4 × historical performance)`, so roles are earned by measured competence, not hardcoded.
+- **Dialogue & negotiation** — *Le Conciliabule* forms a squad from a natural-language mission and runs a recruitment debate between agents; the *Bazar des Dinars* gives the society a token economy.
+- **Conflict resolution** — an editor-in-chief fusion pass reconciles conflicting fragments into one thesis; the *40th Voleur* runs an adversarial check on the result; the mode veto lets the collective overrule its own consensus.
+- **Measurable efficiency gains versus single-agent approaches** — this is the centre of our submission: **29 wins / 6 losses / 5 ties over 40 double-judged pairwise rounds, +21.9% mean quality** against a single `qwen-turbo` agent, with every run committed to `bench/` — including the ones where the society *loses*.
 
 ## Qwen Cloud / Alibaba Cloud usage
 - Default provider `qwen-cloud` via DashScope OpenAI-compatible endpoint.
