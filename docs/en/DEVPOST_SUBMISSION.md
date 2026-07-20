@@ -6,7 +6,7 @@
 **La Caverne aux 40 Voleurs** — An Adaptive Multi-Agent MoE Orchestrator on Qwen Cloud
 
 ## Short Description (tagline)
-40 expert Qwen "thieves" directed by one Genie that knows **when NOT to be a MoE** — adaptive routing, editor-fusion, self-veto, measured +23% quality vs a single agent under a double-judge pairwise benchmark.
+A troupe of specialized Qwen "thieves" directed by one Genie that knows **when NOT to be a MoE** — adaptive routing, editor-fusion, self-veto. **+21.9% mean quality** vs a single agent, 29 wins / 6 losses over 40 rounds of double-judge pairwise benchmarking.
 
 ## Project Description (full)
 
@@ -14,27 +14,34 @@
 
 **Core ideas**
 - **Adaptive delegation gate (L79):** analytical mono-domain tasks → 1 expert, no fusion (k=1). Constructive multi-domain tasks → top-k experts + "editor-in-chief" fusion (one narrator, not a patchwork).
-- **Mode veto (L80):** the orchestrator confronts its fused answer with the best single expert alone and **rejects its own fusion** if the single expert wins — proof the MoE only activates when it pays off.
+- **Mode veto (L80):** the orchestrator confronts its fused answer with the best single expert alone and **rejects its own fusion** if the single expert wins. Implemented and opt-in (`MOE_MODE_VETO=on`) — **we have not yet benchmarked it, so we claim no measured gain from it.**
 - **Qwen family orchestration:** `qwen-turbo` (router) · `qwen-plus` (experts) · `qwen-coder-plus` (code) · `qwen-max` (fusion + judge). Embeddings via `text-embedding-v3`, images via `z-image-turbo`, video via `wan2.1`.
 - **Honest, reproducible benchmark:** pairwise A/B randomized + **double judge** (qwen-max + qwen-plus), victory only on agreement, 4-criteria rubric /20, 5 reps.
 
 **Headline result (reproducible)**
-| Case (judge /20) | qwen-turbo | MoE v1 naive | MoE v2 adaptive |
-|---|---:|---:|---:|
-| secure login | 14.30 | 16.00 | 10.80 |
-| microservices migration | 13.80 | 17.67 | **18.60** |
-| pure refactor | 13.20 | 19.67 | 16.70 |
-| **consistency** | **11.90** | **13.33 ❌** | **19.50 ✅ (5/5 unanimous)** |
-| **Global** | **13.30** | 16.67 (+4%) | **16.40 (+23%) · 12/20 consensus** |
 
-The v1 regression on `consistency` (fusion dilutes analysis) is **the discovery that motivated v2**.
+Final configuration, **3 independent runs, 40 pairwise rounds**: **29 wins / 6 losses / 5 ties** — an **82.9% win rate on decided rounds**, quality gain **+18.9%…+23.6%** (mean **+21.9%**).
+
+Per-case detail from the longest run (5 reps, 20 rounds, `bench/hard-1784462060104.json`):
+
+| Case (judge /20) | qwen-turbo | MoE v2 adaptive |
+|---|---:|---:|
+| secure login | 14.30 | 10.80 ❌ |
+| microservices migration | 13.80 | **18.60** |
+| pure refactor | 13.20 | **16.70** |
+| **consistency** | **11.90** | **19.50 ✅ (5/5 unanimous)** |
+| **Global** | **13.30** | **16.40 (+23.31%)** |
+
+**We report a range, not one number, on purpose.** The *same* `qwen-turbo` baseline scored between **13.30 and 16.00** across runs — a 2.70-point swing on identical cases. That judge variance is larger than any single-run delta, which is precisely why victory is scored by **randomized pairwise A/B with double-judge consensus** rather than by comparing absolute means. **All 6 benchmark runs are committed in `bench/`**, including the early naive-MoE run (`hard-1784388536221.json`) that gained only +4.17% — that regression on `consistency` (fusion dilutes analysis) is **the discovery that motivated v2**.
+
+**Where we still lose:** on `secure login` the adaptive MoE scores 10.80 against the single agent's 14.30. We publish the case instead of dropping it. `MOE_MODE_VETO` (L80) is built to catch exactly this failure mode, but is not yet benchmarked.
 
 **Original product identity — Le Camp**
 - **L'Embûche** — an adversarial strategist audits the gang's robustness and recruits a breakthrough expert.
 - **Le Conciliabule** — an MoE recruiter forms the optimal squad from a natural-language mission, then runs a recruitment debate.
 - **Les Sceaux** — generative SVG sigil + dynamic tide; every Genie has its own crest.
 
-**Architecture:** 81 functional layers (L0–L80) verified by a reproducible audit script, 25/25 tests green, typecheck + build green. Zero heavy dependencies: native Node ESM backend + React/Vite/TS frontend.
+**Architecture:** 81 functional layers (L0–L80), each proven **implemented** — a real file exporting a real symbol — by a reproducible audit script (`scripts/audit-layers.mjs`); behaviour is covered separately by 25/25 green tests, plus typecheck and build green. Zero heavy dependencies: native Node ESM backend + React/Vite/TS frontend.
 
 ## Track
 **AI Showrunner** — La Caverne is an agent orchestrator that casts, routes, fuses and self-corrects a troupe of Qwen experts to "produce" a single coherent answer, exactly the showrunner metaphor.
@@ -57,14 +64,15 @@ Node ESM backend (`server/`) with a provider-agnostic factory routed to Qwen Clo
 ## Accomplishments we're proud of
 - Turning a measured regression (v1 consistency 13.33) into the **discovery** that justifies the adaptive v2 (19.50, 5/5 unanimous).
 - A self-veto mechanism: the orchestrator can reject its own fusion.
-- 81/81 layers verified by a reproducible script, not a manual checklist.
+- 81/81 layers proven implemented by a reproducible script rather than asserted in a manual checklist.
+- **Publishing every benchmark run, including the ones that flatter us least** — the baseline's own 2.70-point variance is disclosed, not buried.
 
 ## What we learned
 That "build a MoE" is not the hard part — "knowing when NOT to be a MoE" is.
 
 ## What's next
 - Run the benchmark with `MOE_MODE_VETO=on` end-to-end to quantify the self-correction gain on the weak cases (login/refactor).
-- Expand the expert pool toward the full 40.
+- Grow the expert pool toward the 40 of the tale. **To be precise about naming: "40 Voleurs" is the Ali Baba reference in the project's name, not a headcount.** The benchmarked Champion roster holds **5 specialized thieves with top-k = 3 selected per query** — the orchestration layer is roster-size-agnostic, and the thesis we defend is "know when to use only one", not "we have the most experts".
 
 ## Built with
 Qwen Cloud (DashScope) · Alibaba Cloud ModelStudio · Node.js · React · TypeScript · Vite · Monaco · Mermaid.

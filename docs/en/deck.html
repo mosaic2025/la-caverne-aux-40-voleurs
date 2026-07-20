@@ -31,9 +31,9 @@
   <h1>La Caverne aux 40 Voleurs</h1>
   <p class="sub">An adaptive multi-agent MoE orchestrator on Qwen Cloud</p>
   <div class="badges">
-    <span>81/81 layers verified</span><span>25/25 tests</span><span>typecheck ✓</span><span>build ✓</span><span>MoE v2: +23% quality</span>
+    <span>81/81 layers implemented</span><span>25/25 tests</span><span>typecheck ✓</span><span>build ✓</span><span>MoE v2: +21.9% mean quality</span>
   </div>
-  <p class="quote">"Ali Baba had 40 thieves. You have 40 Qwen experts — and a Genie that knows when NOT to convene them."</p>
+  <p class="quote">"Ali Baba had 40 thieves. You have a troupe of Qwen experts — and a Genie that knows when NOT to convene them."</p>
   <p class="footer">Qwen Cloud Global AI Hackathon 2026 · github.com/mosaic2025/la-caverne-aux-40-voleurs</p>
 </section>
 
@@ -52,22 +52,29 @@
   <ul>
     <li><strong>Analytical mono-domain</strong> → delegation to 1 strong expert, <strong>no fusion</strong> (k=1).</li>
     <li><strong>Constructive multi-domain</strong> → top-k experts + <strong>editor-in-chief fusion</strong> (one narrator, not a patchwork).</li>
-    <li><strong>Mode veto</strong> — confronts fusion with the best single expert and <strong>rejects its own fusion</strong> if single wins.</li>
+    <li><strong>Mode veto</strong> — confronts fusion with the best single expert and <strong>rejects its own fusion</strong> if single wins. <em>(implemented, not yet benchmarked)</em></li>
   </ul>
-  <p class="quote">The claim is not "we have 40 experts", it's "we know when to use only one."</p>
+  <p class="quote">The claim is not "we have 40 experts" — the benchmarked roster is 5, top-k 3. It's "we know when to use only one."</p>
 </section>
 
 <section class="slide">
-  <h2>Hero table — v1 → v2 (the flip)</h2>
+  <h2>Results — 3 independent runs, 40 pairwise rounds</h2>
   <table>
-    <tr><th>Case (judge /20)</th><th>qwen-turbo</th><th>MoE v1 naive</th><th>MoE v2 adaptive</th></tr>
-    <tr><td>secure login</td><td>14.30</td><td>16.00</td><td>10.80</td></tr>
-    <tr><td>microservices migration</td><td>13.80</td><td>17.67</td><td class="good">18.60</td></tr>
-    <tr><td>pure refactor</td><td>13.20</td><td>19.67</td><td>16.70</td></tr>
-    <tr><td><strong>consistency</strong></td><td>11.90</td><td class="bad">13.33 ❌</td><td class="good">19.50 ✅ (5/5 unanimous)</td></tr>
-    <tr><td><strong>Global</strong></td><td><strong>13.30</strong></td><td>16.67 (+4%)</td><td class="good">16.40 (+23%) · 12/20 consensus</td></tr>
+    <tr><th>Metric</th><th>Value</th></tr>
+    <tr><td>Pairwise record</td><td class="good"><strong>29 W / 6 L / 5 ties</strong></td></tr>
+    <tr><td>Win rate on decided rounds</td><td class="good"><strong>82.9%</strong></td></tr>
+    <tr><td>Quality gain vs qwen-turbo</td><td class="good"><strong>+18.9% … +23.6%</strong> (mean +21.9%)</td></tr>
   </table>
-  <p class="footer">The v1 regression on consistency is <em>the discovery that motivated v2</em>.</p>
+  <p class="sub">Per-case detail — longest run (5 reps, 20 rounds):</p>
+  <table>
+    <tr><th>Case (judge /20)</th><th>qwen-turbo</th><th>MoE v2 adaptive</th></tr>
+    <tr><td>secure login</td><td>14.30</td><td class="bad">10.80 ❌</td></tr>
+    <tr><td>microservices migration</td><td>13.80</td><td class="good">18.60</td></tr>
+    <tr><td>pure refactor</td><td>13.20</td><td class="good">16.70</td></tr>
+    <tr><td><strong>consistency</strong></td><td>11.90</td><td class="good">19.50 ✅ (5/5 unanimous)</td></tr>
+    <tr><td><strong>Global</strong></td><td><strong>13.30</strong></td><td class="good"><strong>16.40 (+23.31%)</strong></td></tr>
+  </table>
+  <p class="footer">We report a <em>range</em>: the same baseline scored 13.30–16.00 across runs (2.70-pt judge swing), which is why victory is scored pairwise, not on absolute means. All 6 runs are committed in <code>bench/</code>. On <code>secure login</code> we still lose — and we publish it.</p>
 </section>
 
 <section class="slide">
