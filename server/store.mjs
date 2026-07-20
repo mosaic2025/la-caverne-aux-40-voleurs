@@ -13,7 +13,7 @@ import { snapshot, listSnapshots, restoreSnapshot } from "./persistence/snapshot
 import { cacheGet, cacheSet, cacheStats } from "./persistence/cache.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_FILE = path.join(__dirname, "data.json");
+const DATA_FILE = process.env.CAVERNE_DATA_FILE || path.join(__dirname, "data.json");
 
 function checksum(data) {
   return crypto.createHash("sha256").update(data).digest("hex").slice(0, 16);

@@ -1,0 +1,34 @@
+# La Caverne aux 40 Voleurs — backend on Alibaba Cloud (Container Service / SAE / ECS+Docker)
+#
+#   export DASHSCOPE_API_KEY=sk-xxxxx
+#   docker compose up -d --build
+#   curl http://<PUBLIC_IP>:8787/api/health   ->  {"ok":true}
+#
+services:
+  caverne-backend:
+    build: .
+    image: caverne-backend:latest
+    container_name: caverne-backend
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: "8787"
+      NODE_ENV: production
+      # Qwen Cloud / ModelStudio (DashScope) — required for real MoE answers.
+      # Leave empty to run in DEMO_MODE (mock responses, health still green).
+      DASHSCOPE_API_KEY: "${DASHSCOPE_API_KEY:-}"
+      DEMO_MODE: "${DEMO_MODE:-}"
+      # Runtime state lives on the mounted volume, not inside the image layer.
+      CAVERNE_DATA_FILE: /app/data/data.json
+    # Persist runtime state (data.json) across container restarts.
+    volumes:
+      - caverne-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8787/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  caverne-data:

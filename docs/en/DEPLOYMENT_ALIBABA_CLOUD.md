@@ -35,6 +35,29 @@ La Caverne is a long-running HTTP server with **SSE streaming** (`/api/ask`) and
 - Screenshot of the ECS instance page + the `curl` response.
 - (Optional) point the frontend `npm run build` then serve `dist/` on the same ECS via `npx serve dist` on port 5273, or a 2nd Nginx.
 
+### One-command deploy (systemd, recommended)
+On the ECS instance, instead of the manual steps above:
+```bash
+curl -fsSL https://raw.githubusercontent.com/mosaic2025/la-caverne-aux-40-voleurs/main/scripts/deploy-ecs.sh -o d.sh
+DASHSCOPE_API_KEY=sk-xxxxx bash d.sh
+```
+This installs Node 20, clones the repo, writes `server/.env`, and runs the backend as a
+`systemd` service that survives reboots. Runtime state is persisted to `/var/lib/la-caverne/data.json`
+(outside the clone dir), so redeploying never wipes it.
+
+## Alternative: Container Service / SAE / ECS + Docker
+La Caverne ships a `Dockerfile` (exposes `8787`) and a `docker-compose.yml`.
+On any Docker host (ECS with Docker, or a node in Alibaba Container Service / ACK):
+```bash
+export DASHSCOPE_API_KEY=sk-xxxxx
+docker compose up -d --build
+curl http://<PUBLIC_IP>:8787/api/health   # -> {"ok":true}
+```
+Persistence: the compose file sets `CAVERNE_DATA_FILE=/app/data/data.json` and mounts a named
+volume `caverne-data`, so `data.json` survives container restarts and rebuilds.
+For **Alibaba Container Registry (ACR)**: `docker build -t <registry>/caverne-backend:latest .`,
+`docker push`, then deploy that image on SAE / ACK with env `DASHSCOPE_API_KEY` and port `8787` exposed.
+
 ## Alternative: Function Compute (FC) custom runtime
 Only if ECS is not available. FC HTTP triggers struggle with SSE, so the `/api/ask` stream may not work end-to-end; non-streaming routes (`/api/health`, `/api/genies`, `/api/camp/*`) will. Use the `s` CLI (Serverless Devs) with a Node custom runtime. Not recommended for the full demo.
 

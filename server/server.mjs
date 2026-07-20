@@ -42,7 +42,7 @@ import { ContractRegistry } from "./maxi/registry.mjs";
 import { observe as fusionObserve, voiceHint as fusionVoiceHint } from "./routes/fusion.mjs";
 import { onMoeRunComplete } from "./routes/balance.mjs";
 
-const DATA_FILE = path.join(__dirname, "data.json");
+const DATA_FILE = process.env.CAVERNE_DATA_FILE || path.join(__dirname, "data.json");
 const PORT = Number(process.env.PORT || 8787);
 
 // ---------- Persistance ----------

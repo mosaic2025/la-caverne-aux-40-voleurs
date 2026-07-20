@@ -14,6 +14,7 @@ set -euo pipefail
 
 REPO="https://github.com/mosaic2025/la-caverne-aux-40-voleurs.git"
 APP_DIR="/opt/la-caverne"
+DATA_DIR="/var/lib/la-caverne"
 PORT="${PORT:-8787}"
 
 if [ -z "${DASHSCOPE_API_KEY:-}" ]; then
@@ -46,6 +47,8 @@ sed -i "s|^DASHSCOPE_API_KEY=.*|DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}|" server/
 chmod 600 server/.env
 
 echo "==> [5/5] Starting as a systemd service (survives SSH disconnect + reboot)"
+# Runtime state lives outside APP_DIR so a redeploy (rm -rf APP_DIR) never wipes it.
+mkdir -p "$DATA_DIR"
 cat > /etc/systemd/system/la-caverne.service <<EOF
 [Unit]
 Description=La Caverne aux 40 Voleurs - Qwen Cloud MoE orchestrator
@@ -56,6 +59,7 @@ Type=simple
 WorkingDirectory=${APP_DIR}
 Environment=PORT=${PORT}
 Environment=NODE_ENV=production
+Environment=CAVERNE_DATA_FILE=${DATA_DIR}/data.json
 ExecStart=$(command -v node) ${APP_DIR}/server/server.mjs
 Restart=always
 RestartSec=3
