@@ -8,18 +8,19 @@ An adaptive Mixture-of-Experts (MoE) multi-agent orchestrator built natively on 
 flowchart TD
     U[User query] --> G[Genie / MoE engine<br/>server/moe.mjs]
     G --> CL{classifyTask<br/>L79 adaptive gate}
-    CL -- "analytical / mono-domain" --> DEL[Delegation k=1<br/>single strong expert<br/>no fusion]
+    CL -- "analytical / mono-domain" --> DEL[Delegation k=1<br/>top-1 expert<br/>no fusion, no traitor, no veto]
     CL -- "constructive / multi-domain" --> RT[Routing<br/>embedding x historical perf]
     RT --> TOP[Top-k experts<br/>parallel fragments]
     TOP --> FUS[Editor-in-chief fusion<br/>qwen-max]
-    FUS --> VTO{Mode veto L80<br/>fused vs best-single}
-    VTO -- "single wins" --> SIN[Keep single expert answer]
-    VTO -- "fused wins / tie" --> FUSED[Keep fused answer]
-    DEL --> TR
-    SIN --> TR
-    FUSED --> TR
-    TR[40th Voleur / Traitor<br/>adversarial check] --> OUT[Final answer + SSE observability]
-    OUT --> OBS[L'Observatoire<br/>live reasoning trace]
+    FUS --> SIR[Sirocco<br/>cognitive thermodynamics<br/>embeddings only, on by default]
+    SIR --> TR[40th Voleur / Traitor<br/>adversarial check<br/>on by default]
+    TR --> VTO{Mode veto L80<br/>fused vs best-single<br/>opt-in, OFF by default}
+    VTO -- "single wins" --> SIN[Fused answer replaced<br/>by single expert answer]
+    VTO -- "fused wins / tie / veto off" --> FUSED[Keep fused answer]
+    DEL --> OUT
+    SIN --> OUT
+    FUSED --> OUT
+    OUT[Final answer + SSE observability] --> OBS[L'Observatoire<br/>live reasoning trace]
 
     subgraph Qwen[Qwen Cloud / Alibaba Cloud — DashScope]
         TUR[qwen-turbo<br/>router]
@@ -41,11 +42,15 @@ flowchart TD
 4. **Adaptive gate (L79)** — `classifyTask(query)`:
    - analytical mono-domain or low complexity → **delegation** to the top-1 expert, no fusion;
    - constructive multi-domain → top-k + fusion.
+   - The delegation branch **returns directly** (`server/moe.mjs`, early return): no fusion, no sirocco, no traitor, no veto — a mono-expert answer has no fusion to challenge. The run records `traitor: { severity: "none" }`.
 5. **Fragments** — parallel Qwen expert calls, strict per-specialty prompts.
 6. **Editor-in-chief fusion (qwen-max)** — pick the best base fragment, integrate others only if they fix errors or cover gaps, single thesis, capped length.
-7. **Mode veto (L80, opt-in `MOE_MODE_VETO=on`)** — best single expert answers alone; a qwen-plus judge compares fused vs single in randomized pairwise A/B; if single wins, the fusion is rejected.
-8. **40th Voleur (Traitor)** — adversarial post-fusion check; on a major objection, a targeted correction tour runs.
-9. **Observability** — every step is streamed over SSE to **L'Observatoire** (selected agent, why, cost, latency, confidence, fusion, veto, decision history).
+7. **Sirocco** (`server/moe.mjs:541`, on by default, `MOE_SIROCCO=off` disables) — cognitive-thermodynamics reading over the fragments (heat / drift / state); embeddings only, no extra LLM call.
+8. **40th Voleur (Traitor)** (`server/moe.mjs:550`, on by default, `MOE_TRAITOR=off` disables) — adversarial post-fusion check; on a **major** objection the corrected answer replaces the fused one. Fusion path only.
+9. **Mode veto (L80)** (`server/moe.mjs:565`, opt-in `MOE_MODE_VETO=on`, **OFF by default**) — runs **last, after the traitor**, on the possibly-corrected answer: the best single expert answers alone and a qwen-plus judge compares fused vs single in randomized pairwise A/B; if single wins, the fused answer is replaced. **Experimental and not benchmarked — we claim no measured gain from it.**
+10. **Observability** — every step is streamed over SSE to **L'Observatoire** (selected agent, why, cost, latency, confidence, fusion, sirocco, traitor, veto, decision history).
+
+> Steps 7–9 apply to the **fusion path only**, in that order. Verified against `server/moe.mjs`: Sirocco L541 → Traitor L550 → Mode veto L565.
 
 ## Qwen family orchestration
 

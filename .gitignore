@@ -152,3 +152,6 @@ universal_kb/
 server/data.json
 server/journal.ndjson
 server/snapshots/
+
+# Runtime store — contains local usage history, never commit
+server/data.json
