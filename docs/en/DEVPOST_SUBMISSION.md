@@ -14,7 +14,7 @@ A troupe of specialized Qwen "thieves" directed by one Genie that knows **when N
 
 **Core ideas**
 - **Adaptive delegation gate (L79):** analytical mono-domain tasks → 1 expert, no fusion (k=1). Constructive multi-domain tasks → top-k experts + "editor-in-chief" fusion (one narrator, not a patchwork).
-- **Mode veto (L80):** the orchestrator confronts its fused answer with the best single expert alone and **rejects its own fusion** if the single expert wins. Implemented and opt-in (`MOE_MODE_VETO=on`) — **we have not yet benchmarked it, so we claim no measured gain from it.**
+- **Mode veto (L80):** the orchestrator confronts its fused answer with the best single expert alone and **rejects its own fusion** if the single expert wins. Implemented, opt-in (`MOE_MODE_VETO=on`), **off by default — and we benchmarked it: it made things worse** (−7.40% global, `bench/hard-1784573625928.json`). We publish that run and claim no benefit from the veto.
 - **Qwen family orchestration:** `qwen-turbo` (router) · `qwen-plus` (experts) · `qwen-coder-plus` (code) · `qwen-max` (fusion + judge). Embeddings via `text-embedding-v3`, images via `z-image-turbo`, video via `wan2.1`.
 - **Honest, reproducible benchmark:** pairwise A/B randomized + **double judge** (qwen-max + qwen-plus), victory only on agreement, 4-criteria rubric /20, 5 reps.
 
@@ -71,7 +71,7 @@ Node ESM backend (`server/`) with a provider-agnostic factory routed to Qwen Clo
 That "build a MoE" is not the hard part — "knowing when NOT to be a MoE" is.
 
 ## What's next
-- Run the benchmark with `MOE_MODE_VETO=on` end-to-end to quantify the self-correction gain on the weak cases (login/refactor).
+- **Diagnose the veto regression.** We ran the `MOE_MODE_VETO=on` benchmark expecting it to rescue the weak `login` case. It did the opposite: global quality 15.21 → 14.08 (**−7.40%**) and `login` collapsed to 5.67/20. The run is committed (`bench/hard-1784573625928.json`). Understanding why the veto path degrades single-expert answers is our first task after the hackathon — we would rather ship the negative result than quietly disable the feature.
 - Grow the expert pool toward the 40 of the tale. **To be precise about naming: "40 Voleurs" is the Ali Baba reference in the project's name, not a headcount.** The benchmarked Champion roster holds **5 specialized thieves with top-k = 3 selected per query** — the orchestration layer is roster-size-agnostic, and the thesis we defend is "know when to use only one", not "we have the most experts".
 
 ## Built with
