@@ -34,7 +34,7 @@ Per-case detail from the longest run (5 reps, 20 rounds, `bench/hard-17844620601
 
 **We report a range, not one number, on purpose.** The *same* `qwen-turbo` baseline scored between **13.30 and 16.00** across runs — a 2.70-point swing on identical cases. That judge variance is larger than any single-run delta, which is precisely why victory is scored by **randomized pairwise A/B with double-judge consensus** rather than by comparing absolute means. **All 6 benchmark runs are committed in `bench/`**, including the early naive-MoE run (`hard-1784388536221.json`) that gained only +4.17% — that regression on `consistency` (fusion dilutes analysis) is **the discovery that motivated v2**.
 
-**Where we still lose:** on `secure login` the adaptive MoE scores 10.80 against the single agent's 14.30. We publish the case instead of dropping it. `MOE_MODE_VETO` (L80) is built to catch exactly this failure mode, but is not yet benchmarked.
+**Where we still lose:** on `secure login` the adaptive MoE scores 10.80 against the single agent's 14.30. We publish the case instead of dropping it. `MOE_MODE_VETO` (L80) was built to catch exactly this failure mode — we benchmarked it and it made things worse (−7.40% global, `login` down to 5.67, `bench/hard-1784573625928.json`), so it stays off by default and we claim no gain from it.
 
 **Original product identity — Le Camp**
 - **L'Embûche** — an adversarial strategist audits the gang's robustness and recruits a breakthrough expert.
@@ -79,5 +79,6 @@ Qwen Cloud (DashScope) · Alibaba Cloud ModelStudio · Node.js · React · TypeS
 
 ## Links
 - Public repo: https://github.com/mosaic2025/la-caverne-aux-40-voleurs
-- Demo video: [YouTube unlisted link — to add]
-- Live demo (Alibaba Cloud): [deployment URL — to add]
+- Licence: Apache 2.0
+- Architecture diagram: [`docs/en/ARCHITECTURE.md`](https://github.com/mosaic2025/la-caverne-aux-40-voleurs/blob/main/docs/en/ARCHITECTURE.md)
+- Benchmark evidence (all runs committed): [`bench/`](https://github.com/mosaic2025/la-caverne-aux-40-voleurs/tree/main/bench)
